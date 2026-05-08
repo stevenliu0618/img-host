@@ -407,12 +407,26 @@
   <!-- 配置状态 -->
   <div class="card">
     <div class="card-title"><i class="fa-solid fa-sliders" style="margin-right:4px;"></i>配置</div>
-    <div class="key-status">
+    <div class="key-status" id="keyConfigRow">
       <div>
         <div class="key-label">API Key</div>
-        <div class="key-hint">服务端配置，无需前端设置</div>
+        <div class="key-hint" id="keyHintText">服务端配置，无需前端设置</div>
       </div>
-      <span class="key-indicator" id="keyIndicator">检测中…</span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="key-indicator" id="keyIndicator">检测中…</span>
+        <button class="btn-ghost" id="setKeyBtn" style="border:none;cursor:pointer;"><i class="fa-regular fa-pen-to-square"></i> 设置</button>
+      </div>
+    </div>
+    <!-- Key 输入行（默认隐藏） -->
+    <div id="keyInputRow" style="display:none;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="display:flex;gap:8px;">
+        <input type="password" id="keyInput" placeholder="输入速创 API Key" style="flex:1;font-size:13px;padding:8px 10px;" />
+        <button class="btn-sm btn-sm-blue" id="keySaveBtn"><i class="fa-regular fa-floppy-disk"></i> 保存</button>
+        <button class="btn-sm btn-sm-ghost" id="keyCancelBtn">取消</button>
+      </div>
+      <div style="font-size:12px;color:var(--dim);margin-top:6px;">
+        Key 保存在服务器上，重启不丢失。<a href="https://api.wuyinkeji.com/user/key" target="_blank" style="color:var(--accent);">去速创控制台获取</a>
+      </div>
     </div>
   </div>
 
@@ -453,6 +467,12 @@
   const historyList = $('#historyList')
   const clearHistoryBtn = $('#clearHistoryBtn')
   const keyIndicator = $('#keyIndicator')
+  const setKeyBtn = $('#setKeyBtn')
+  const keyInputRow = $('#keyInputRow')
+  const keyInput = $('#keyInput')
+  const keySaveBtn = $('#keySaveBtn')
+  const keyCancelBtn = $('#keyCancelBtn')
+  const keyHintText = $('#keyHintText')
   const toast = $('#toast')
 
   // ── 状态 ──
@@ -618,14 +638,50 @@
       const r=await fetch('/api/gpt/status'); const d=await r.json()
       if (d.ready) {
         keyIndicator.textContent = '✓ 已配置'; keyIndicator.style.color = 'var(--green)'
+        keyHintText.textContent = 'Key: ' + d.keyHint
+        keyInputRow.style.display = 'none'
       } else {
-        keyIndicator.textContent = '⚠️ 未配置'; keyIndicator.style.color = 'var(--red)'
+        keyIndicator.textContent = d.env ? '⚠️ 环境变量未设置' : '⚠️ 未配置'
+        keyIndicator.style.color = 'var(--orange)'
+        keyHintText.textContent = '点击"设置"输入 Key'
+        if (d.env) {
+          setKeyBtn.style.display = 'none'
+          keyHintText.textContent = '请去 Zeabur 设置环境变量 GPTIMAGE_API_KEY'
+        } else {
+          setKeyBtn.style.display = 'inline-flex'
+        }
       }
     } catch {
       keyIndicator.textContent = '无法连接服务'; keyIndicator.style.color = 'var(--red)'
     }
   }
   fetchKeyStatus()
+
+  // ── API Key 运行时设置 ──
+  setKeyBtn.addEventListener('click', () => {
+    keyInputRow.style.display = 'block'
+    keyInput.focus()
+  })
+  keyCancelBtn.addEventListener('click', () => { keyInputRow.style.display = 'none'; keyInput.value = '' })
+  keySaveBtn.addEventListener('click', async () => {
+    const key = keyInput.value.trim()
+    if (!key) { showToast('请输入 API Key'); return }
+    try {
+      const r = await fetch('/api/gpt/set-key', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key })
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.detail || d.msg || '设置失败')
+      showToast('API Key 已保存')
+      keyInput.value = ''
+      keyInputRow.style.display = 'none'
+      fetchKeyStatus()
+    } catch (e) {
+      showToast('设置失败: ' + e.message)
+    }
+  })
 
   // ── 生成 ──
   genBtn.addEventListener('click', async () => {
