@@ -206,57 +206,17 @@ async def health():
 
 # ── GPT-Image-2 代理 API ──────────────────────────────────────────────────
 
-# 服务端 API Key（优先环境变量 -> 持久化文件 -> 空）
-GPTIMAGE_API_KEY = os.environ.get("GPTIMAGE_API_KEY", "")
-GPTIMAGE_KEY_FILE = "/data/gpt_api_key.txt"
-
-
-def _load_gpt_key():
-    global GPTIMAGE_API_KEY
-    if GPTIMAGE_API_KEY:
-        return  # 环境变量优先级最高，不可覆盖
-    try:
-        k = Path(GPTIMAGE_KEY_FILE).read_text(encoding="utf-8").strip()
-        if k:
-            GPTIMAGE_API_KEY = k
-    except (FileNotFoundError, OSError):
-        pass
-
-
-def _save_gpt_key(key: str):
-    try:
-        Path(GPTIMAGE_KEY_FILE).parent.mkdir(parents=True, exist_ok=True)
-        Path(GPTIMAGE_KEY_FILE).write_text(key.strip(), encoding="utf-8")
-    except OSError:
-        pass  # 持久化失败不阻塞
-
-
-_load_gpt_key()
+# 服务端 API Key（硬编码，前端零接触）
+GPTIMAGE_API_KEY = "z257spNXb7V9nbYpIiH5JMh3VM"
 
 
 @app.get("/api/gpt/status")
 async def gpt_status():
     """查询 API Key 配置状态（不暴露完整 Key）。"""
-    env_configured = bool(os.environ.get("GPTIMAGE_API_KEY", ""))
     return JSONResponse({
-        "ready": bool(GPTIMAGE_API_KEY),
-        "env": env_configured,
-        "keyHint": GPTIMAGE_API_KEY[:8] + "…" if GPTIMAGE_API_KEY else "",
+        "ready": True,
+        "keyHint": GPTIMAGE_API_KEY[:8] + "…",
     })
-
-
-@app.post("/api/gpt/set-key")
-async def gpt_set_key(body: dict):
-    """运行时设置 API Key（仅当未设环境变量时有效）。"""
-    if os.environ.get("GPTIMAGE_API_KEY", ""):
-        raise HTTPException(400, "环境变量已配置 API Key，不可运行时修改")
-    key = (body.get("key") or "").strip()
-    if not key:
-        raise HTTPException(400, "Key 不能为空")
-    global GPTIMAGE_API_KEY
-    GPTIMAGE_API_KEY = key
-    _save_gpt_key(key)
-    return JSONResponse({"ok": True, "keyHint": key[:8] + "…"})
 
 
 @app.post("/api/gpt/generate")
