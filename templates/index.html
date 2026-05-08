@@ -41,7 +41,10 @@
   }
   .logo { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
   .logo span { color: var(--accent); }
-  .nav-tab:hover { background:var(--card) !important; color:var(--text) !important; }
+  .nav-group { display:flex; gap:4px; background:rgba(0,0,0,0.04); padding:3px; border-radius:8px; }
+  .nav-tab { padding:5px 14px; border-radius:6px; font-size:13px; font-weight:500; text-decoration:none; transition:all .15s; color:var(--sub); }
+  .nav-tab:hover { background:var(--card); color:var(--text); }
+  .nav-tab.active { background:var(--card); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.1); }
   .header-right { display: flex; align-items: center; gap: 12px; }
   .badge {
     font-size: 12px; color: var(--sub);
@@ -305,13 +308,9 @@
 <header>
   <nav style="display:flex;align-items:center;gap:20px;">
     <div class="logo">Deep<span>Novis</span></div>
-    <div style="display:flex;gap:4px;background:rgba(0,0,0,0.05);padding:3px;border-radius:8px;">
-      <a href="/" class="nav-tab active" style="padding:5px 14px;border-radius:6px;font-size:13px;font-weight:500;color:var(--text);text-decoration:none;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.1);transition:all .15s;">
-        <i class="fa-solid fa-image" style="margin-right:4px;"></i>图床
-      </a>
-      <a href="/prompt-editor" class="nav-tab" style="padding:5px 14px;border-radius:6px;font-size:13px;font-weight:500;color:var(--sub);text-decoration:none;transition:all .15s;">
-        <i class="fa-solid fa-wand-magic-sparkles" style="margin-right:4px;"></i>AI绘图
-      </a>
+    <div class="nav-group">
+      <a href="/" class="nav-tab active"><i class="fa-regular fa-image" style="margin-right:3px;"></i>图床</a>
+      <a href="/prompt-editor" class="nav-tab"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:3px;"></i>AI绘图</a>
     </div>
   </nav>
   <div class="header-right">

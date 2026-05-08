@@ -4,9 +4,11 @@ import shutil
 import mimetypes
 import base64
 import hashlib
+import json
 from pathlib import Path
 from datetime import datetime
 
+import requests as http_requests
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -200,3 +202,141 @@ async def delete_image(filename: str):
 @app.get("/api/health")
 async def health():
     return JSONResponse({"status": "ok", "github_configured": bool(GITHUB_TOKEN)})
+
+
+# ── GPT-Image-2 代理 API ──────────────────────────────────────────────────
+
+# 服务端 API Key（优先环境变量，启动时永久固定）
+GPTIMAGE_API_KEY = os.environ.get("GPTIMAGE_API_KEY", "")
+
+
+@app.get("/api/gpt/status")
+async def gpt_status():
+    """查询 API Key 配置状态（不暴露完整 Key）。"""
+    return JSONResponse({
+        "ready": bool(GPTIMAGE_API_KEY),
+        "keyHint": GPTIMAGE_API_KEY[:8] + "…" if GPTIMAGE_API_KEY else "",
+    })
+
+
+@app.post("/api/gpt/generate")
+async def gpt_generate(body: dict):
+    """提交生图任务到速创 API。"""
+    if not GPTIMAGE_API_KEY:
+        raise HTTPException(400, "服务端未配置 API Key")
+
+    prompt = body.get("prompt", "").strip()
+    if not prompt:
+        raise HTTPException(400, "请输入提示词")
+
+    payload = {
+        "prompt": prompt,
+        "size": body.get("size", "auto"),
+    }
+    urls = body.get("urls")
+    if isinstance(urls, list) and len(urls):
+        payload["urls"] = urls
+
+    url = f"https://api.wuyinkeji.com/api/async/image_gpt?key={GPTIMAGE_API_KEY}"
+    headers = {
+        "Authorization": GPTIMAGE_API_KEY,
+        "Content-Type": "application/json",
+    }
+
+    try:
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+        data = resp.json()
+        return JSONResponse(content=data)
+    except http_requests.Timeout:
+        raise HTTPException(502, "第三方 API 超时")
+    except Exception as e:
+        raise HTTPException(502, f"请求第三方 API 失败: {e}")
+
+
+@app.get("/api/gpt/result/{task_id}")
+async def gpt_result(task_id: str):
+    """查询生图任务结果。"""
+    if not GPTIMAGE_API_KEY:
+        raise HTTPException(400, "服务端未配置 API Key")
+
+    url = f"https://api.wuyinkeji.com/api/async/detail?key={GPTIMAGE_API_KEY}&id={task_id}"
+
+    try:
+        resp = http_requests.get(url, timeout=10)
+        data = resp.json()
+
+        # 如果成功且有图片 URL，提取并简化返回
+        if data.get("code") == 200 and data.get("data", {}).get("status") == 2:
+            raw_data = data["data"]
+            # 从响应中提取图片 URL
+            img_url = _extract_image_url(raw_data)
+            if img_url:
+                return JSONResponse({
+                    "code": 1,
+                    "data": img_url,
+                    "msg": "生成成功",
+                })
+
+        # 失败
+        if data.get("data", {}).get("status") == 3:
+            return JSONResponse({
+                "code": 2,
+                "msg": data["data"].get("message", "生成失败"),
+            })
+
+        # 处理中
+        return JSONResponse({
+            "code": 0,
+            "msg": "处理中",
+        })
+    except http_requests.Timeout:
+        raise HTTPException(502, "查询超时")
+    except Exception as e:
+        raise HTTPException(502, f"查询失败: {e}")
+
+
+def _extract_image_url(data: dict) -> str | None:
+    """递归扫描响应数据，提取图片 URL。"""
+    if not data or not isinstance(data, dict):
+        return None
+
+    candidates = [
+        data.get("urls"), data.get("imgUrls"),
+        data.get("url"), data.get("imageUrl"), data.get("image_url"),
+        data.get("result"), data.get("output"), data.get("images"),
+    ]
+    for c in candidates:
+        if not c:
+            continue
+        if isinstance(c, str) and (c.startswith("http://") or c.startswith("https://")):
+            return c
+        if isinstance(c, list) and len(c):
+            first = c[0]
+            if isinstance(first, str) and first.startswith("http"):
+                return first
+            if isinstance(first, dict):
+                if first.get("url"):
+                    return first["url"]
+                if first.get("imageUrl"):
+                    return first["imageUrl"]
+        if isinstance(c, dict):
+            if c.get("url"):
+                return c["url"]
+            if isinstance(c.get("urls"), list) and len(c["urls"]):
+                return c["urls"][0]
+
+    # 深层递归
+    return _deep_scan_url(data)
+
+
+def _deep_scan_url(obj, depth=0):
+    if depth > 3 or not obj or not isinstance(obj, dict):
+        return None
+    for val in obj.values():
+        if isinstance(val, str) and re.match(r"https?://.*\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?|$)", val, re.I):
+            return val
+        if isinstance(val, dict):
+            found = _deep_scan_url(val, depth + 1)
+            if found:
+                return found
+    return None

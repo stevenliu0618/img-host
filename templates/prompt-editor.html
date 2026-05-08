@@ -4,321 +4,246 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI 绘图 · DeepNovis</title>
-<script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"/>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg-primary: #0D0D12;
-  --bg-secondary: #14141C;
-  --bg-card: #1A1A26;
-  --bg-input: #12121A;
-  --bg-elevated: #22223A;
-  --text-primary: #EDE8E0;
-  --text-secondary: #9C988F;
-  --text-muted: #6B6760;
-  --accent-gold: #C9A44A;
-  --accent-gold-light: #E0C276;
-  --accent-gold-glow: rgba(201,164,74,0.15);
-  --border-color: #282834;
-  --border-light: #1E1E2C;
-  --error: #E55D5D;
-  --error-bg: rgba(229,93,93,0.08);
-  --success: #5DB88A;
-  --success-bg: rgba(93,184,138,0.08);
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
-  --shadow-elevated: 0 8px 32px rgba(0,0,0,0.5);
-  --transition: 0.25s cubic-bezier(0.32, 0, 0.4, 1);
-  --nav-bg: #f5f5f7;
-  --nav-border: #e0e0e5;
-  --accent-blue: #0071e3;
-}
-*,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { font-size: 15px; -webkit-font-smoothing: antialiased; }
-body {
-  min-height: 100vh;
-  position: relative;
-  overflow-x: hidden;
-}
-body::before {
-  content: '';
-  position: fixed; inset: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 70% 40% at 50% 15%, rgba(201,164,74,0.04) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 50% at 85% 80%, rgba(94,205,196,0.025) 0%, transparent 60%);
-  z-index: 0;
-}
-body::after {
-  content: '';
-  position: fixed; inset: 0;
-  pointer-events: none;
-  opacity: 0.025;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 256px 256px;
-  z-index: 0;
-}
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --border: #e5e5ea;
+    --text: #1d1d1f;
+    --sub: #6e6e73;
+    --dim: #86868b;
+    --accent: #0071e3;
+    --accent-hover: #0077ed;
+    --green: #30d158;
+    --orange: #ff9f0a;
+    --red: #ff453a;
+    --radius: 14px;
+    --radius-sm: 10px;
+    --shadow: 0 2px 14px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02);
+    --shadow-lg: 0 8px 30px rgba(0,0,0,0.08);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+    --transition: 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+  }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
 
-/* ── 顶栏（与图床一致） ── */
-header {
-  position: sticky; top: 0; z-index: 100;
-  background: rgba(245,245,247,0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border-bottom: 1px solid var(--nav-border);
-  padding: 0 32px;
-  height: 52px;
-  display: flex; align-items: center; justify-content: space-between;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
-}
-.logo { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; color: #1d1d1f; }
-.logo span { color: var(--accent-blue); }
-.nav-tab { padding:5px 14px; border-radius:6px; font-size:13px; font-weight:500; text-decoration:none; transition:all .15s; }
-.nav-tab:hover { background:#fff; color:#1d1d1f !important; }
+  /* ── 顶栏（与图床统一） ── */
+  header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(245,245,247,0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 52px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo span { color: var(--accent); }
+  .nav-group { display:flex; gap:4px; background:rgba(0,0,0,0.04); padding:3px; border-radius:8px; }
+  .nav-tab {
+    padding:5px 14px; border-radius:6px; font-size:13px; font-weight:500;
+    text-decoration:none; transition:all .15s; color:var(--sub);
+  }
+  .nav-tab:hover { background:var(--surface); color:var(--text); }
+  .nav-tab.active { background:var(--surface); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.1); }
+  .badge {
+    font-size:12px; color:var(--sub);
+    background:rgba(0,0,0,0.04); padding:3px 10px; border-radius:20px;
+  }
 
-/* ── 主内容 ── */
-.app {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 40px 24px 80px;
-  position: relative;
-  z-index: 1;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: var(--text-primary);
-}
+  /* ── 主内容 ── */
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+  }
 
-.app-title {
-  font-family: 'Instrument Serif', serif;
-  font-style: italic;
-  font-size: 2rem;
-  letter-spacing: -0.02em;
-  background: linear-gradient(135deg, var(--accent-gold-light), var(--accent-gold));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  line-height: 1.1;
-}
+  .page-title { font-size:28px; font-weight:700; letter-spacing:-0.02em; margin-bottom:4px; }
+  .page-sub { font-size:14px; color:var(--sub); margin-bottom:32px; }
 
-/* ── Prompt ── */
-.prompt-textarea {
-  width: 100%;
-  min-height: 140px;
-  padding: 18px 20px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: 1.05rem;
-  line-height: 1.7;
-  resize: vertical;
-  outline: none;
-  transition: all var(--transition);
-}
-.prompt-textarea:focus {
-  border-color: var(--accent-gold);
-  box-shadow: 0 0 0 4px var(--accent-gold-glow), inset 0 1px 0 rgba(201,164,74,0.05);
-}
-.prompt-textarea::placeholder { color: var(--text-muted); font-style: italic; }
-.char-count { font-size:0.75rem; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--sub); margin-bottom: 16px;
+  }
 
-/* ── Quick prompts ── */
-.chip {
-  display: inline-flex;
-  padding: 6px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all var(--transition);
-  font-family: inherit;
-}
-.chip:hover {
-  border-color: var(--accent-gold);
-  color: var(--accent-gold);
-  background: var(--accent-gold-glow);
-}
-.chip::before { content:'+'; margin-right:4px; font-size:0.7rem; opacity:0.6; }
+  /* ── Form ── */
+  textarea, input, select {
+    font-family: var(--font);
+    font-size: 15px;
+    width: 100%;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    background: var(--surface);
+    color: var(--text);
+    outline: none;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+  textarea:focus, input:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0,113,227,0.15);
+  }
+  textarea { resize: vertical; min-height: 100px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group:last-child { margin-bottom: 0; }
+  .form-label {
+    display: block;
+    font-size: 13px; font-weight: 500;
+    color: var(--sub); margin-bottom: 6px;
+  }
+  .form-row { display: flex; gap: 12px; }
+  .form-row > * { flex: 1; }
 
-/* ── Size selector ── */
-.section-label {
-  font-size:0.75rem; font-weight:600; color:var(--text-secondary);
-  text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px;
-}
-.size-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(64px,1fr)); gap:8px; }
-.size-option {
-  display:flex; flex-direction:column; align-items:center; gap:6px;
-  padding:10px 6px 8px; background:var(--bg-card);
-  border:1px solid var(--border-color); border-radius:var(--radius-sm);
-  cursor:pointer; transition:all var(--transition);
-}
-.size-option:hover { border-color:rgba(201,164,74,0.3); background:var(--bg-elevated); }
-.size-option.active { border-color:var(--accent-gold); background:var(--accent-gold-glow); }
-.size-visual { width:28px; background:var(--text-muted); border-radius:2px; opacity:0.6; transition:all var(--transition); }
-.size-option.active .size-visual { background:var(--accent-gold); opacity:1; }
-.size-option-label { font-size:0.65rem; color:var(--text-muted); font-weight:500; }
-.size-option.active .size-option-label { color:var(--accent-gold); }
+  /* ── Button ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 500;
+    padding: 12px 24px;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all var(--transition);
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .btn-primary {
+    background: var(--accent); color: #fff; width: 100%;
+  }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary {
+    background: transparent; color: var(--accent);
+    border: 1.5px solid var(--border); font-size: 13px; padding: 8px 16px;
+  }
+  .btn-secondary:hover { background: rgba(0,113,227,0.05); }
+  .btn-ghost {
+    background: transparent; color: var(--sub);
+    font-size: 13px; padding: 6px 10px; border-radius: 8px;
+  }
+  .btn-ghost:hover { background: rgba(0,0,0,0.04); }
+  .btn-sm {
+    padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none; transition: all .15s;
+  }
+  .btn-sm-blue { background: var(--accent); color: #fff; }
+  .btn-sm-blue:hover { background: var(--accent-hover); }
+  .btn-sm-ghost { background: rgba(0,0,0,0.06); color: var(--text); }
+  .btn-sm-ghost:hover { background: rgba(0,0,0,0.10); }
 
-/* ── Ref URLs ── */
-.form-input {
-  width:100%; padding:12px 14px; background:var(--bg-input);
-  border:1px solid var(--border-color); border-radius:var(--radius-sm);
-  color:var(--text-primary); font-family:inherit; font-size:0.9rem;
-  outline:none; transition:all var(--transition);
-}
-.form-input:focus { border-color:var(--accent-gold); box-shadow:0 0 0 3px var(--accent-gold-glow); }
-.btn-add-ref {
-  display:inline-flex; align-items:center; gap:4px;
-  padding:6px 12px; background:transparent;
-  border:1px dashed var(--border-color); border-radius:var(--radius-sm);
-  color:var(--text-muted); font-family:inherit; font-size:0.78rem;
-  cursor:pointer; transition:all var(--transition);
-}
-.btn-add-ref:hover { border-color:var(--accent-gold); color:var(--accent-gold); }
+  /* ── Spinner ── */
+  .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Buttons ── */
-.btn-primary {
-  display:inline-flex; align-items:center; justify-content:center; gap:8px;
-  background: linear-gradient(135deg, var(--accent-gold), #B8922E);
-  color: #0D0D12;
-  padding: 14px 32px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  border: none;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition);
-  letter-spacing: 0.02em;
-  font-family: inherit;
-}
-.btn-primary:hover { transform:translateY(-1px); box-shadow:0 4px 20px var(--accent-gold-glow); }
-.btn-primary:disabled { opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none; }
+  /* ── Status ── */
+  .status-banner {
+    display: none; align-items: center; gap: 10px;
+    padding: 12px 16px; border-radius: var(--radius-sm);
+    font-size: 14px; margin-top: 16px;
+  }
+  .status-banner.show { display: flex; }
+  .status-banner.success { background: #e8f8ee; color: #248a3d; }
+  .status-banner.error { background: #fee8e6; color: #bf3a2b; }
+  .status-banner.pending { background: #fff4e2; color: #b26200; }
 
-/* ── Result ── */
-.result-section { display:none; }
-.result-section.visible { display:block; }
-.result-card {
-  background:var(--bg-card); border:1px solid var(--border-color);
-  border-radius:var(--radius-xl); overflow:hidden; box-shadow:var(--shadow-card);
-}
-.result-image-wrap {
-  position:relative; width:100%; background:var(--bg-input);
-  display:flex; align-items:center; justify-content:center; min-height:200px;
-}
-.result-image { max-width:100%; max-height:520px; display:block; object-fit:contain; }
-.result-meta { padding:16px 20px; border-top:1px solid var(--border-color); }
-.btn-action {
-  display:inline-flex; align-items:center; gap:4px;
-  padding:6px 12px; background:var(--bg-input);
-  border:1px solid var(--border-color); border-radius:var(--radius-sm);
-  color:var(--text-secondary); font-family:inherit; font-size:0.75rem;
-  cursor:pointer; transition:all var(--transition);
-}
-.btn-action:hover { border-color:var(--accent-gold); color:var(--accent-gold); background:var(--accent-gold-glow); }
+  /* ── Result ── */
+  .result-area { display: none; margin-top: 16px; }
+  .result-area.show { display: block; }
+  .result-area img {
+    width: 100%; border-radius: var(--radius-sm);
+    box-shadow: var(--shadow); display: block;
+  }
+  .result-actions {
+    display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+  }
+  .result-url {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; background: var(--bg);
+    border-radius: 8px; font-size: 12px; color: var(--sub);
+    flex: 1; min-width: 0; word-break: break-all;
+  }
 
-/* ── Toast ── */
-#toast-container {
-  position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
-  z-index:200; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none;
-}
-.toast {
-  padding:10px 20px; background:#1d1d1f; color:#fff;
-  border-radius:980px; font-size:13px; font-weight:500;
-  box-shadow:0 8px 32px rgba(0,0,0,0.25);
-  animation:toastIn .25s ease forwards; pointer-events:auto;
-}
-.toast.error { background:#3a1515; }
-.toast.success { background:#153a25; }
-@keyframes toastIn { from{opacity:0;transform:translateY(12px) scale(0.95)} to{opacity:1;transform:translateY(0) scale(1)} }
-@keyframes toastOut { from{opacity:1} to{opacity:0;transform:translateY(8px) scale(0.95)} }
-.toast.out { animation:toastOut .2s ease forwards; }
+  /* ── History ── */
+  .history-list { display: flex; flex-direction: column; gap: 10px; }
+  .history-item {
+    display: flex; gap: 12px; padding: 12px;
+    border-radius: var(--radius-sm); background: var(--bg);
+    transition: background var(--transition); cursor: pointer;
+  }
+  .history-item:hover { background: #eeeef0; }
+  .history-thumb {
+    width: 60px; height: 60px; flex-shrink: 0;
+    border-radius: 8px; object-fit: cover; background: var(--border);
+  }
+  .history-info { flex: 1; min-width: 0; }
+  .history-prompt {
+    font-size: 13px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+  .history-meta { font-size: 12px; color: var(--dim); }
+  .history-empty {
+    text-align: center; padding: 24px;
+    color: var(--dim); font-size: 14px;
+  }
 
-/* ── Status badge ── */
-.status-badge {
-  display:inline-flex; align-items:center; gap:6px;
-  padding:6px 14px; border-radius:980px;
-  font-size:0.78rem; font-weight:500;
-  background:rgba(201,164,74,0.1); color:var(--accent-gold);
-  border:1px solid rgba(201,164,74,0.2);
-}
-.status-badge.success { background:var(--success-bg); color:var(--success); border-color:rgba(93,184,138,0.2); }
-.status-badge.error { background:var(--error-bg); color:var(--error); border-color:rgba(229,93,93,0.2); }
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
+    background: rgba(29,29,31,0.92); color: #fff;
+    padding: 10px 20px; border-radius: 10px;
+    font-size: 13px; opacity: 0;
+    transition: all 0.3s ease; pointer-events: none;
+    backdrop-filter: blur(8px); z-index: 999;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* ── Shimmer ── */
-.shimmer {
-  position:absolute; inset:0;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.03),rgba(255,255,255,0.06),rgba(255,255,255,0.03),transparent);
-  background-size:200% 100%;
-  animation:shimmer 2s ease-in-out infinite;
-}
-@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  /* ── Key 状态提示 ── */
+  .key-status {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0;
+  }
+  .key-status + .key-status { border-top: 1px solid var(--border); }
+  .key-label { font-size: 14px; }
+  .key-hint { font-size: 12px; color: var(--dim); }
+  .key-indicator { font-size: 12px; font-weight: 500; }
 
-/* ── Modal / Drawer ── */
-.overlay {
-  position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);
-  z-index:100; display:none;
-}
-.overlay.open { display:block; }
-.drawer {
-  position:fixed; top:0; right:-400px; width:380px; max-width:90vw; height:100vh;
-  background:var(--bg-secondary); border-left:1px solid var(--border-color);
-  z-index:101; transition:right 0.35s cubic-bezier(0.32,0,0.4,1);
-  display:flex; flex-direction:column; box-shadow:var(--shadow-elevated);
-}
-.drawer.open { right:0; }
-.drawer-header { display:flex; align-items:center; justify-content:space-between; padding:20px 24px; border-bottom:1px solid var(--border-color); }
-.drawer-title { font-family:'Instrument Serif',serif; font-size:1.2rem; color:var(--text-primary); }
-.drawer-body { flex:1; overflow-y:auto; padding:16px; }
-.history-item {
-  background:var(--bg-card); border:1px solid var(--border-color);
-  border-radius:var(--radius-md); padding:14px; margin-bottom:10px;
-  cursor:pointer; transition:all var(--transition);
-}
-.history-item:hover { border-color:var(--accent-gold); background:var(--bg-elevated); }
-.history-item-prompt { font-size:0.85rem; color:var(--text-secondary); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin-bottom:6px; }
-.history-item-meta { font-size:0.7rem; color:var(--text-muted); display:flex; gap:12px; }
-
-/* ── Settings Modal ── */
-.modal {
-  position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) scale(0.95);
-  background:var(--bg-secondary); border:1px solid var(--border-color);
-  border-radius:var(--radius-xl); padding:28px 32px; z-index:101;
-  width:420px; max-width:90vw; display:none;
-  box-shadow:var(--shadow-elevated);
-}
-.modal.open { display:block; transform:translate(-50%,-50%) scale(1); }
-.modal-title { font-family:'Instrument Serif',serif; font-size:1.1rem; margin-bottom:20px; color:var(--text-primary); }
-
-/* ── Loading dots ── */
-.loading-dots { display:inline-flex; gap:4px; align-items:center; }
-.loading-dots span { width:6px; height:6px; background:currentColor; border-radius:50%; animation:dotPulse 1.2s ease-in-out infinite; }
-.loading-dots span:nth-child(2) { animation-delay:0.2s; }
-.loading-dots span:nth-child(3) { animation-delay:0.4s; }
-@keyframes dotPulse { 0%,80%,100%{opacity:0.3;transform:scale(0.8)} 40%{opacity:1;transform:scale(1.2)} }
-
-/* ── Responsive ── */
-@media (max-width:640px) {
-  .app { padding:24px 16px 60px; }
-  .app-title { font-size:1.6rem; }
-  header { padding:0 16px; }
-  .prompt-textarea { min-height:110px; font-size:0.95rem; padding:14px 16px; }
-  .size-grid { grid-template-columns:repeat(auto-fill,minmax(56px,1fr)); }
-  .drawer { width:100vw; max-width:100vw; }
-  .modal { width:95vw; padding:20px; }
-}
-
-::-webkit-scrollbar { width:6px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--border-color); border-radius:3px; }
+  @media (max-width: 600px) {
+    .container { padding: 20px 16px 60px; }
+    .card { padding: 20px; }
+    header { padding: 0 16px; }
+    .page-title { font-size: 24px; }
+    .form-row { flex-direction: column; }
+  }
 </style>
 </head>
 <body>
@@ -327,475 +252,301 @@ header {
 <header>
   <nav style="display:flex;align-items:center;gap:20px;">
     <div class="logo">Deep<span>Novis</span></div>
-    <div style="display:flex;gap:4px;background:rgba(0,0,0,0.05);padding:3px;border-radius:8px;">
-      <a href="/" class="nav-tab" style="color:#6e6e73;">📷 图床</a>
-      <a href="/prompt-editor" class="nav-tab" style="background:#fff;color:#1d1d1f;box-shadow:0 1px 4px rgba(0,0,0,0.1);">✨ AI绘图</a>
+    <div class="nav-group">
+      <a href="/" class="nav-tab"><i class="fa-regular fa-image" style="margin-right:3px;"></i>图床</a>
+      <a href="/prompt-editor" class="nav-tab active"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:3px;"></i>AI绘图</a>
     </div>
   </nav>
-  <div class="header-right" style="display:flex;gap:12px;align-items:center;">
-    <span style="font-size:12px;color:#6e6e73;background:rgba(0,0,0,0.05);padding:3px 10px;border-radius:20px;">
-      GPT-Image-2 · 0.1元/张
-    </span>
+  <div style="display:flex;gap:12px;align-items:center;">
+    <span class="badge">GPT-Image-2 · 0.1元/张</span>
   </div>
 </header>
 
-<div class="app">
-  <!-- Header -->
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:36px;padding-bottom:20px;border-bottom:1px solid var(--border-color);">
-    <div>
-      <h1 class="app-title">Prompt Studio</h1>
-      <div style="font-size:0.8rem;color:var(--text-muted);letter-spacing:0.08em;text-transform:uppercase;font-weight:500;margin-top:4px;">
-        输入提示词 · 选择比例 · 生成图像
+<div class="container">
+
+  <div class="page-title">GPT-Image-2</div>
+  <div class="page-sub">基于速创 API 的 AI 生图工具</div>
+
+  <!-- 生图区 -->
+  <div class="card">
+    <div class="card-title"><i class="fa-regular fa-pen-to-square" style="margin-right:4px;"></i>生图</div>
+
+    <div class="form-group">
+      <label class="form-label" for="prompt">提示词</label>
+      <textarea id="prompt" placeholder="描述你想生成的图片…" rows="4"></textarea>
+    </div>
+
+    <div class="form-row form-group">
+      <div>
+        <label class="form-label" for="size">图片比例</label>
+        <select id="size">
+          <option value="auto">自动 auto</option>
+          <option value="1:1">正方形 1:1</option>
+          <option value="16:9">横屏 16:9</option>
+          <option value="9:16">竖屏 9:16</option>
+          <option value="4:3">横屏 4:3</option>
+          <option value="3:4">竖屏 3:4</option>
+          <option value="3:2">横屏 3:2</option>
+          <option value="2:3">竖屏 2:3</option>
+          <option value="21:9">超宽 21:9</option>
+          <option value="9:21">超长 9:21</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label" for="refUrl">参考图 URL <span style="font-weight:400;color:var(--dim)">(可选)</span></label>
+        <input id="refUrl" type="url" placeholder="多张用逗号分隔" />
       </div>
     </div>
-    <div style="display:flex;gap:8px;">
-      <button class="btn-action" onclick="openSettings()" style="background:transparent;border-color:var(--border-color);color:var(--text-secondary);padding:8px 12px;font-size:1rem;">
-        <i class="fa-solid fa-gear"></i>
-      </button>
-      <button class="btn-action" onclick="toggleHistory()" style="background:transparent;border-color:var(--border-color);color:var(--text-secondary);padding:8px 12px;font-size:1rem;">
-        <i class="fa-solid fa-clock-rotate-left"></i>
-      </button>
-    </div>
-  </div>
 
-  <!-- Prompt Input -->
-  <div style="margin-bottom:28px;">
-    <textarea
-      id="promptInput"
-      class="prompt-textarea"
-      placeholder="描述你想生成的图像… 越详细，效果越好。试试包含主体、环境、光线、风格。"
-      maxlength="2000"
-      oninput="onPromptChange()"
-    ></textarea>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:0 4px;">
-      <span class="char-count" id="charCount">0 / 2000</span>
-    </div>
-  </div>
-
-  <!-- Quick Prompts -->
-  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:28px;" id="quickPrompts"></div>
-
-  <!-- Aspect Ratio -->
-  <div style="margin-bottom:28px;">
-    <div class="section-label">图像比例</div>
-    <div class="size-grid" id="sizeGrid"></div>
-  </div>
-
-  <!-- Reference Images -->
-  <div style="margin-bottom:28px;">
-    <div class="section-label">参考图片（可选）</div>
-    <div id="refList" style="display:flex;flex-direction:column;gap:8px;"></div>
-    <button class="btn-add-ref" onclick="addRefInput()">+ 添加参考图片 URL</button>
-  </div>
-
-  <!-- Generate Button -->
-  <div style="margin-bottom:36px;">
-    <button class="btn-primary" id="generateBtn" onclick="handleGenerate()" style="width:100%;height:52px;font-size:1rem;">
-      <span id="generateText"><i class="fa-solid fa-wand-magic-sparkles"></i> 生成图像</span>
+    <button class="btn btn-primary" id="genBtn">
+      <i class="fa-solid fa-wand-magic-sparkles"></i>
+      <span id="genBtnText">生成图片</span>
     </button>
-  </div>
 
-  <!-- Status -->
-  <div id="statusArea" style="margin-bottom:24px;"></div>
+    <!-- 状态 -->
+    <div class="status-banner" id="statusBanner">
+      <i class="fa-solid" id="statusIcon"></i>
+      <span id="statusText"></span>
+    </div>
 
-  <!-- Result -->
-  <div class="result-section" id="resultSection">
-    <div class="result-card">
-      <div class="result-image-wrap" id="resultImageWrap">
-        <div style="color:var(--text-muted);font-size:0.9rem;padding:60px 20px;text-align:center;" id="resultPlaceholder">✨ 等待生成结果...</div>
-        <div class="shimmer" id="resultShimmer" style="display:none;"></div>
-      </div>
-      <div class="result-meta" id="resultMeta" style="display:none;">
-        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-          <span id="resultPromptText" style="font-size:0.82rem;color:var(--text-secondary);flex:1;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;"></span>
-          <div style="display:flex;gap:6px;flex-shrink:0;">
-            <button class="btn-action" onclick="downloadResult()"><i class="fa-solid fa-download"></i> 下载</button>
-            <button class="btn-action" onclick="retryGeneration()"><i class="fa-solid fa-arrow-rotate-right"></i> 重试</button>
-          </div>
-        </div>
+    <!-- 结果 -->
+    <div class="result-area" id="resultArea">
+      <img id="resultImg" alt="生成结果" />
+      <div class="result-actions">
+        <span class="result-url" id="resultUrl"></span>
+        <button class="btn-secondary" id="copyBtn" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;border-radius:8px;">
+          <i class="fa-regular fa-copy"></i> 复制
+        </button>
+        <button class="btn-secondary" id="downloadBtn" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;border-radius:8px;">
+          <i class="fa-solid fa-download"></i> 下载
+        </button>
       </div>
     </div>
   </div>
-</div>
 
-<!-- Overlay -->
-<div class="overlay" id="overlay"></div>
-
-<!-- History Drawer -->
-<div class="drawer" id="historyDrawer">
-  <div class="drawer-header">
-    <span class="drawer-title">生成历史</span>
-    <button class="btn-action" onclick="toggleHistory()" style="background:transparent;border-color:transparent;font-size:1rem;padding:4px 8px;">✕</button>
-  </div>
-  <div class="drawer-body" id="historyBody">
-    <div style="text-align:center;color:var(--text-muted);padding:40px 0;font-size:0.9rem;">暂无历史记录</div>
-  </div>
-</div>
-
-<!-- Settings Modal -->
-<div class="modal" id="settingsModal">
-  <div class="modal-title">⚙️ 设置</div>
-  <div style="margin-bottom:16px;">
-    <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">API Key</label>
-    <input class="form-input" id="apiKeyInput" type="password" placeholder="输入无忧科技 API Key" oninput="onApiKeyChange()">
-    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
-      在 <a href="https://api.wuyinkeji.com/user/key" target="_blank" style="color:var(--accent-gold);">控制台 → 密钥管理</a> 获取
+  <!-- 配置状态 -->
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-sliders" style="margin-right:4px;"></i>配置</div>
+    <div class="key-status">
+      <div>
+        <div class="key-label">API Key</div>
+        <div class="key-hint">服务端配置，无需前端设置</div>
+      </div>
+      <span class="key-indicator" id="keyIndicator">检测中…</span>
     </div>
   </div>
-  <button class="btn-primary" style="width:100%;margin-top:8px;" onclick="closeSettings()">✓ 确认</button>
+
+  <!-- 历史记录 -->
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      <span><i class="fa-regular fa-clock"></i> 历史记录</span>
+      <button class="btn-ghost" id="clearHistoryBtn" style="font-size:12px;color:var(--red);border:none;cursor:pointer;">清空</button>
+    </div>
+    <div id="historyList" class="history-list">
+      <div class="history-empty">暂无记录</div>
+    </div>
+  </div>
+
 </div>
 
 <!-- Toast -->
-<div id="toast-container"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-// ── CONFIG ────────────────────────────────────────────────────────────────
-const API_SUBMIT = 'https://api.wuyinkeji.com/api/async/image_gpt';
-const API_QUERY  = 'https://api.wuyinkeji.com/api/async/detail';
+;(() => {
+  'use strict'
 
-const SIZES = [
-  {value:'auto',label:'Auto'},{value:'1:1',label:'1:1'},{value:'3:2',label:'3:2'},
-  {value:'2:3',label:'2:3'},{value:'4:3',label:'4:3'},{value:'3:4',label:'3:4'},
-  {value:'16:9',label:'16:9'},{value:'9:16',label:'9:16'},{value:'21:9',label:'21:9'},
-  {value:'9:21',label:'9:21'},{value:'2:1',label:'2:1'},{value:'1:2',label:'1:2'},
-  {value:'1:3',label:'1:3'},{value:'3:1',label:'3:1'},
-];
+  // ── DOM ──
+  const $ = (s, p = document) => p.querySelector(s)
+  const promptEl = $('#prompt')
+  const sizeEl = $('#size')
+  const refUrlEl = $('#refUrl')
+  const genBtn = $('#genBtn')
+  const genBtnText = $('#genBtnText')
+  const statusBanner = $('#statusBanner')
+  const statusIcon = $('#statusIcon')
+  const statusText = $('#statusText')
+  const resultArea = $('#resultArea')
+  const resultImg = $('#resultImg')
+  const resultUrl = $('#resultUrl')
+  const copyBtn = $('#copyBtn')
+  const downloadBtn = $('#downloadBtn')
+  const historyList = $('#historyList')
+  const clearHistoryBtn = $('#clearHistoryBtn')
+  const keyIndicator = $('#keyIndicator')
+  const toast = $('#toast')
 
-const QUICK_PROMPTS = [
-  'Photorealistic, ultra-detailed...',
-  'Cinematic lighting, dramatic shadows...',
-  'Studio portrait, soft diffuse light...',
-  'Landscape, golden hour, warm tones...',
-  'Abstract art, fluid shapes, vibrant colors...',
-  'Anime style, cel-shaded, clean lines...',
-  'Minimalist, clean composition, negative space...',
-  'Cyberpunk, neon lights, rainy city...',
-];
+  // ── 状态 ──
+  let polling = false
+  let pollTimer = null
+  let currentResult = null
 
-// ── STATE ─────────────────────────────────────────────────────────────────
-let state = {
-  prompt: '',
-  size: 'auto',
-  refUrls: [],
-  apiKey: localStorage.getItem('gpt_image_api_key') || '',
-  isGenerating: false,
-  taskId: null,
-  pollTimer: null,
-  currentResult: null,
-  history: [],
-};
-
-function loadHistory() {
-  try { state.history = JSON.parse(localStorage.getItem('gpt_image_history')||'[]'); }
-  catch { state.history = []; }
-}
-function saveHistory() {
-  try { localStorage.setItem('gpt_image_history', JSON.stringify(state.history.slice(0,50))); } catch {}
-  renderHistory();
-}
-
-// ── INIT ──────────────────────────────────────────────────────────────────
-function init() {
-  loadHistory();
-  renderSizeGrid();
-  renderQuickPrompts();
-  renderRefInputs();
-  if (state.apiKey) document.getElementById('apiKeyInput').value = state.apiKey;
-  document.addEventListener('keydown', e => {
-    if ((e.metaKey||e.ctrlKey) && e.key==='Enter') { e.preventDefault(); handleGenerate(); }
-  });
-}
-
-// ── RENDER ────────────────────────────────────────────────────────────────
-function renderSizeGrid() {
-  document.getElementById('sizeGrid').innerHTML = SIZES.map(s => {
-    const active = s.value===state.size;
-    const [w,h] = s.value==='auto'?[1,1]:s.value.split(':').map(Number);
-    const dim = Math.round(24 * Math.min(1, h/w));
-    return `<div class="size-option ${active?'active':''}" onclick="selectSize('${s.value}')">
-      <div class="size-visual" style="aspect-ratio:${s.value==='auto'?'1/1':s.value};height:${dim}px;"></div>
-      <span class="size-option-label">${s.label}</span>
-    </div>`;
-  }).join('');
-}
-
-function renderQuickPrompts() {
-  document.getElementById('quickPrompts').innerHTML = QUICK_PROMPTS.map(p =>
-    `<button class="chip" onclick="appendPrompt('${p.replace(/'/g,"\\'")}')">${p}</button>`
-  ).join('');
-}
-
-function renderRefInputs() {
-  const list = document.getElementById('refList');
-  if (state.refUrls.length===0) {
-    list.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;padding:4px 0;"><i class="fa-regular fa-image" style="margin-right:4px;"></i>暂无参考图片</div>';
-    return;
+  // ── 历史 ──
+  function getHistory() {
+    try { return JSON.parse(localStorage.getItem('deepnovis_ai_history')||'[]') } catch { return [] }
   }
-  list.innerHTML = state.refUrls.map((url,i) =>
-    `<div style="display:flex;gap:8px;align-items:center;">
-      <input class="form-input" type="url" value="${url.replace(/"/g,'&quot;')}"
-             placeholder="https://example.com/image.jpg" oninput="updateRefUrl(${i},this.value)"/>
-      <button onclick="removeRef(${i})" style="background:transparent;border:none;color:var(--text-muted);cursor:pointer;font-size:1rem;padding:4px;border-radius:50%;width:30px;height:30px;flex-shrink:0;"><i class="fa-solid fa-xmark"></i></button>
-    </div>`
-  ).join('');
-}
-
-function renderHistory() {
-  const body = document.getElementById('historyBody');
-  if (state.history.length===0) {
-    body.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:40px 0;font-size:0.9rem;">暂无历史记录</div>';
-    return;
+  function saveHistory(h) { localStorage.setItem('deepnovis_ai_history', JSON.stringify(h.slice(0,50))) }
+  function addHistory(prompt, size, imgUrl) {
+    const h = getHistory(); h.unshift({ prompt, size, imgUrl, time: Date.now() }); saveHistory(h); renderHistory()
   }
-  body.innerHTML = [...state.history].reverse().map((item,i) => {
-    const idx = state.history.length-1-i;
-    const d = new Date(item.time).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
-    return `<div class="history-item" onclick="restoreHistory(${idx})">
-      <div class="history-item-prompt">${item.prompt||'(空提示词)'}</div>
-      <div class="history-item-meta"><span>${item.size||'auto'}</span><span>${d}</span><span>${item.status==='success'?'✓ 成功':'✗ 失败'}</span></div>
-    </div>`;
-  }).join('');
-}
-
-// ── ACTIONS ───────────────────────────────────────────────────────────────
-function selectSize(v) { state.size=v; renderSizeGrid(); }
-function appendPrompt(t) {
-  const ta=document.getElementById('promptInput');
-  const ins=t.endsWith('...')?t:t+' ';
-  const cur=ta.selectionStart;
-  ta.value=ta.value.substring(0,cur)+ins+ta.value.substring(cur);
-  ta.focus(); ta.setSelectionRange(cur+ins.length,cur+ins.length);
-  onPromptChange();
-}
-function onPromptChange() {
-  const ta=document.getElementById('promptInput');
-  state.prompt=ta.value;
-  const len=ta.value.length;
-  document.getElementById('charCount').textContent=len+' / 2000';
-}
-function addRefInput() { state.refUrls.push(''); renderRefInputs(); }
-function updateRefUrl(i,v) { state.refUrls[i]=v; }
-function removeRef(i) { state.refUrls.splice(i,1); renderRefInputs(); }
-function onApiKeyChange() {
-  state.apiKey=document.getElementById('apiKeyInput').value;
-  localStorage.setItem('gpt_image_api_key',state.apiKey);
-}
-
-// ── MODALS ────────────────────────────────────────────────────────────────
-function openSettings() {
-  document.getElementById('overlay').classList.add('open');
-  document.getElementById('settingsModal').classList.add('open');
-}
-function closeSettings() { closeAll(); }
-function toggleHistory() {
-  const d=document.getElementById('historyDrawer');
-  const o=document.getElementById('overlay');
-  if(d.classList.contains('open')) closeAll();
-  else { o.classList.add('open'); d.classList.add('open'); }
-}
-function closeAll() {
-  document.getElementById('overlay').classList.remove('open');
-  document.getElementById('settingsModal').classList.remove('open');
-  document.getElementById('historyDrawer').classList.remove('open');
-}
-
-// ── TOAST ─────────────────────────────────────────────────────────────────
-function toast(msg,type='') {
-  const el=document.createElement('div');
-  el.className='toast '+(type==='error'?'error':type==='success'?'success':'');
-  el.textContent=msg;
-  document.getElementById('toast-container').appendChild(el);
-  setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),250); },2200);
-}
-
-// ── API ───────────────────────────────────────────────────────────────────
-async function handleGenerate() {
-  if (!state.prompt.trim()) { toast('请输入提示词','error'); document.getElementById('promptInput').focus(); return; }
-  if (!state.apiKey) { toast('请先设置 API Key','error'); openSettings(); return; }
-  if (state.isGenerating) return;
-  state.isGenerating = true;
-
-  const btn=document.getElementById('generateBtn');
-  const text=document.getElementById('generateText');
-  btn.disabled=true;
-  text.innerHTML='<span class="loading-dots"><span></span><span></span><span></span></span> 提交中...';
-  showStatus('loading','正在提交生成任务...');
-
-  try {
-    const body={prompt:state.prompt.trim()};
-    if (state.size&&state.size!=='auto') body.size=state.size;
-    const validRefs=state.refUrls.filter(u=>u.trim());
-    if (validRefs.length>0) body.urls=validRefs.map(u=>u.trim());
-
-    const resp=await fetch(`${API_SUBMIT}?key=${encodeURIComponent(state.apiKey)}`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json','Authorization':state.apiKey},
-      body:JSON.stringify(body),
-    });
-    const result=await resp.json();
-    if (result.code!==200) throw new Error(result.msg||'提交失败');
-
-    const taskId=result.data.id;
-    state.taskId=taskId;
-    showStatus('loading',`任务已提交，等待生成...`);
-    await pollResult(taskId);
-  } catch(err) {
-    state.isGenerating=false;
-    btn.disabled=false;
-    text.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图像';
-    showStatus('error',err.message||'请求失败');
-    toast(err.message||'请求失败','error');
+  function renderHistory() {
+    const h = getHistory()
+    if (!h.length) { historyList.innerHTML = '<div class="history-empty">暂无记录</div>'; return }
+    historyList.innerHTML = h.map((item, i) => `
+      <div class="history-item" data-index="${i}" data-url="${item.imgUrl}">
+        <img class="history-thumb" src="${item.imgUrl}" alt="" loading="lazy" />
+        <div class="history-info">
+          <div class="history-prompt">${escHtml(item.prompt)}</div>
+          <div class="history-meta">${item.size||'auto'} · ${fmtTime(item.time)}</div>
+        </div>
+      </div>
+    `).join('')
+    historyList.querySelectorAll('.history-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const idx = parseInt(el.dataset.index); const item = getHistory()[idx]
+        if (item) {
+          showResult(item.imgUrl); promptEl.value = item.prompt; sizeEl.value = item.size||'auto'
+        }
+      })
+    })
   }
-}
+  function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML }
+  function fmtTime(ts) {
+    return new Date(ts).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
+  }
 
-function pollResult(taskId) {
-  return new Promise((resolve,reject)=>{
-    let attempts=0;
-    const max=120;
-    const poll=async()=>{
-      attempts++;
-      try {
-        const resp=await fetch(`${API_QUERY}?key=${encodeURIComponent(state.apiKey)}&id=${encodeURIComponent(taskId)}`,{
-          headers:{'Content-Type':'application/json','Authorization':state.apiKey},
-        });
-        const r=await resp.json();
-        if (r.code!==200) throw new Error(r.msg||'查询失败');
-        const st=r.data.status;
-        const text=document.getElementById('generateText');
-        if (st===0) { text.innerHTML='<span class="loading-dots"><span></span><span></span><span></span></span> 排队中...'; showStatus('loading','排队中，等待处理...'); state.pollTimer=setTimeout(poll,3000); }
-        else if (st===1) { text.innerHTML='<span class="loading-dots"><span></span><span></span><span></span></span> 生成中...'; showStatus('loading','正在生成图像...'); state.pollTimer=setTimeout(poll,2000); }
-        else if (st===2) {
-          state.isGenerating=false;
-          document.getElementById('generateBtn').disabled=false;
-          text.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图像';
-          hideStatus();
-          const imgUrl=extractImageUrl(r.data);
-          if (imgUrl) {
-            showResult(imgUrl,state.prompt.trim(),state.size);
-            addHistoryEntry({prompt:state.prompt.trim(),size:state.size,time:Date.now(),status:'success',imageUrl:imgUrl});
-            toast('✨ 生成成功！','success');
-          } else {
-            showStatus('error','生成成功但未找到图片 URL');
-            toast('生成成功但无法提取图片链接','error');
+  // ── Toast ──
+  function showToast(msg) {
+    toast.textContent = msg; toast.classList.add('show')
+    clearTimeout(toast._t); toast._t = setTimeout(() => toast.classList.remove('show'), 2000)
+  }
+
+  // ── Status ──
+  function setStatus(type, text, icon) {
+    statusBanner.className = 'status-banner show ' + type
+    statusIcon.className = 'fa-solid ' + (icon || '')
+    statusText.textContent = text
+  }
+  function hideStatus() { statusBanner.className = 'status-banner' }
+
+  // ── Result ──
+  function showResult(url) {
+    currentResult = url; resultArea.classList.add('show')
+    resultImg.src = url; resultUrl.textContent = url
+    hideStatus(); genBtn.disabled = false; genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图片'
+  }
+  function hideResult() { resultArea.classList.remove('show'); currentResult = null }
+
+  // ── 复制 ──
+  copyBtn.addEventListener('click', async () => {
+    if (!currentResult) return
+    try { await navigator.clipboard.writeText(currentResult); showToast('已复制图片 URL') }
+    catch {
+      const ta=document.createElement('textarea'); ta.value=currentResult
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove()
+      showToast('已复制图片 URL')
+    }
+  })
+
+  // ── 下载 ──
+  downloadBtn.addEventListener('click', () => {
+    if (!currentResult) return
+    const a=document.createElement('a'); a.href=currentResult
+    a.download='gpt-image2-'+Date.now()+'.png'; a.target='_blank'; a.click()
+  })
+
+  // ── 检查服务端 API Key 状态 ──
+  async function fetchKeyStatus() {
+    try {
+      const r=await fetch('/api/gpt/status'); const d=await r.json()
+      if (d.ready) {
+        keyIndicator.textContent = '✓ 已配置'; keyIndicator.style.color = 'var(--green)'
+      } else {
+        keyIndicator.textContent = '⚠️ 未配置'; keyIndicator.style.color = 'var(--red)'
+      }
+    } catch {
+      keyIndicator.textContent = '无法连接服务'; keyIndicator.style.color = 'var(--red)'
+    }
+  }
+  fetchKeyStatus()
+
+  // ── 生成 ──
+  genBtn.addEventListener('click', async () => {
+    const prompt = promptEl.value.trim()
+    if (!prompt) { showToast('请输入提示词'); promptEl.focus(); return }
+
+    const refRaw = refUrlEl.value.trim()
+    let urls = []
+    if (refRaw) urls = refRaw.split(/[,，\s]+/).filter(u => u.startsWith('http'))
+
+    hideResult()
+    genBtn.disabled = true
+    genBtnText.innerHTML = '<span class="spinner"></span> 提交中…'
+    setStatus('pending', '正在提交任务…', 'fa-circle-notch fa-spin')
+
+    try {
+      // 1️⃣ 提交
+      const r1 = await fetch('/api/gpt/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, size: sizeEl.value, urls })
+      })
+      const d1 = await r1.json()
+      if (!r1.ok) throw new Error(d1.detail || d1.msg || '提交失败')
+      if (d1.code !== 200 || !d1.data?.id) throw new Error(d1.msg || '提交失败')
+
+      const taskId = d1.data.id
+      setStatus('pending', '任务已提交，正在生成…（约 15-30 秒）', 'fa-circle-notch fa-spin')
+      genBtnText.innerHTML = '<span class="spinner"></span> 生成中…'
+      polling = true
+
+      // 2️⃣ 轮询
+      const poll = async () => {
+        try {
+          const r2 = await fetch('/api/gpt/result/' + encodeURIComponent(taskId))
+          const d2 = await r2.json()
+
+          if (d2.code === 1 && d2.data) {
+            // 成功
+            showResult(d2.data)
+            addHistory(prompt, sizeEl.value, d2.data)
+            polling = false
+            return
           }
-          resolve();
-        } else if (st===3) {
-          state.isGenerating=false;
-          document.getElementById('generateBtn').disabled=false;
-          text.innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图像';
-          const em=r.data.message||'生成失败';
-          showStatus('error',em);
-          addHistoryEntry({prompt:state.prompt.trim(),size:state.size,time:Date.now(),status:'failed',error:em});
-          toast(em,'error');
-          reject(new Error(em));
-        } else state.pollTimer=setTimeout(poll,3000);
-      } catch(e) {
-        if (attempts<max) state.pollTimer=setTimeout(poll,3000);
-        else {
-          state.isGenerating=false;
-          document.getElementById('generateBtn').disabled=false;
-          document.getElementById('generateText').innerHTML='<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图像';
-          showStatus('error','轮询超时，请稍后手动查询');
-          reject(new Error('轮询超时'));
+
+          if (d2.code === 2) {
+            throw new Error(d2.msg || '生成失败')
+          }
+
+          // 处理中，继续轮询
+          pollTimer = setTimeout(poll, 2000)
+        } catch (e) {
+          setStatus('error', '查询出错: ' + e.message, 'fa-circle-exclamation')
+          genBtn.disabled = false
+          genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 重新生成'
+          polling = false
         }
       }
-    };
-    poll();
-  });
-}
 
-function extractImageUrl(data) {
-  if (!data||typeof data!=='object') return null;
-  const candidates=[data.urls,data.imgUrls,data.url,data.imageUrl,data.image_url,data.result,data.output,data.images];
-  for (const c of candidates) {
-    if (!c) continue;
-    if (typeof c==='string'&&(c.startsWith('http://')||c.startsWith('https://'))) return c;
-    if (Array.isArray(c)&&c.length>0) {
-      if (typeof c[0]==='string'&&c[0].startsWith('http')) return c[0];
-      if (typeof c[0]==='object'&&c[0].url) return c[0].url;
+      poll()
+    } catch (e) {
+      setStatus('error', e.message, 'fa-circle-exclamation')
+      genBtn.disabled = false
+      genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 重新生成'
     }
-    if (typeof c==='object') { if (c.url) return c.url; if (Array.isArray(c.urls)&&c.urls.length>0) return c.urls[0]; }
-  }
-  return deepScanUrl(data);
-}
-function deepScanUrl(obj,depth=0) {
-  if (depth>3||!obj||typeof obj!=='object') return null;
-  for (const k of Object.keys(obj)) {
-    const v=obj[k];
-    if (typeof v==='string'&&(v.startsWith('http://')||v.startsWith('https://'))&&/\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)(\?|$)/i.test(v)) return v;
-    if (typeof v==='object') { const f=deepScanUrl(v,depth+1); if (f) return f; }
-  }
-  return null;
-}
+  })
 
-// ── RESULT ────────────────────────────────────────────────────────────────
-function showResult(url,prompt,size) {
-  state.currentResult={imageUrl:url,prompt,size};
-  const section=document.getElementById('resultSection');
-  const wrap=document.getElementById('resultImageWrap');
-  const old=wrap.querySelector('.result-image');
-  if (old) old.remove();
+  // ── 清空历史 ──
+  clearHistoryBtn.addEventListener('click', () => {
+    if (confirm('确定清空所有历史记录？')) { localStorage.removeItem('deepnovis_ai_history'); renderHistory() }
+  })
 
-  const img=document.createElement('img');
-  img.className='result-image';
-  img.src=url; img.alt=prompt;
-  img.onload=()=>{ const s=document.getElementById('resultShimmer'); if(s) s.style.display='none'; };
-  img.onerror=()=>showStatus('error','图片加载失败，请尝试下载或重新生成');
+  // ── 停止轮询 ──
+  window.addEventListener('beforeunload', () => { if (pollTimer) clearTimeout(pollTimer) })
 
-  const ph=document.getElementById('resultPlaceholder');
-  wrap.insertBefore(img,ph);
-  ph.style.display='none';
-
-  document.getElementById('resultMeta').style.display='block';
-  document.getElementById('resultPromptText').textContent=prompt;
-  section.classList.add('visible');
-}
-
-async function downloadResult() {
-  if (!state.currentResult) return;
-  try {
-    toast('正在下载...');
-    const resp=await fetch(state.currentResult.imageUrl);
-    const blob=await resp.blob();
-    const ext=(blob.type.split('/')[1])||'png';
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download=`gpt-image-${Date.now()}.${ext}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    toast('下载完成','success');
-  } catch { window.open(state.currentResult.imageUrl,'_blank'); toast('已在新标签页打开','success'); }
-}
-
-function retryGeneration() {
-  document.getElementById('resultSection').classList.remove('visible');
-  state.currentResult=null;
-  handleGenerate();
-}
-
-function restoreHistory(idx) {
-  const item=state.history[idx];
-  if (!item) return;
-  document.getElementById('promptInput').value=item.prompt||'';
-  onPromptChange();
-  if (item.size) selectSize(item.size);
-  closeAll();
-  toast('已恢复历史提示词','success');
-  document.getElementById('promptInput').focus();
-}
-
-function addHistoryEntry(e) { state.history.push(e); saveHistory(); }
-
-// ── UI HELPERS ────────────────────────────────────────────────────────────
-function showStatus(type,msg) {
-  const area=document.getElementById('statusArea');
-  const icon=type==='loading'?'⟳':type==='success'?'✓':'✗';
-  area.innerHTML=`<div class="status-badge ${type==='success'?'success':type==='error'?'error':''}">${icon} ${msg}</div>`;
-}
-function hideStatus() { document.getElementById('statusArea').innerHTML=''; }
-
-// ── START ─────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', init);
+  // ── 初始化 ──
+  renderHistory()
+})()
 </script>
-
 </body>
 </html>
