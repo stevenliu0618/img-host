@@ -88,6 +88,12 @@ async def index():
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
 
 
+@app.get("/prompt-editor", response_class=HTMLResponse)
+async def prompt_editor():
+    html_path = Path(__file__).parent / "templates" / "prompt-editor.html"
+    return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
+
+
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
     mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
