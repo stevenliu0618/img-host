@@ -5,10 +5,8 @@ import mimetypes
 import base64
 import hashlib
 import json
-import smtplib
 import random
 import time
-from email.mime.text import MIMEText
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -44,50 +42,33 @@ JWT_EXPIRE_HOURS = 72
 BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 USERS_FILE = DATA_DIR / "users.json"
 
-# ── SMTP 邮件配置 ──────────────────────────────────────────────────────────
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp-relay.brevo.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "stevenliu6618@gmail.com")
-SMTP_PASS = os.environ.get("SMTP_PASS", "")
+# ── Resend 邮件配置 ──────────────────────────────────────────────────────
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 
 def _send_email(to: str, subject: str, html: str):
-    """发送邮件，支持多端口/协议自动回退。"""
-    msg = MIMEText(html, "html", "utf-8")
-    msg["Subject"] = subject
-    msg["From"] = SMTP_USER
-    msg["To"] = to
+    """通过 Resend API 发送邮件。"""
+    if not RESEND_API_KEY:
+        raise HTTPException(500, "未配置邮件服务")
 
-    errors = []
+    resp = http_requests.post(
+        "https://api.resend.com/emails",
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "from": "DeepNovis <onboarding@resend.dev>",
+            "to": [to],
+            "subject": subject,
+            "html": html,
+        },
+        timeout=15,
+    )
 
-    # 优先试配置的端口（SSL 或 STARTTLS），再试备选
-    ports_to_try = []
-    if SMTP_PORT == 465:
-        ports_to_try.append((SMTP_HOST, SMTP_PORT, "ssl"))
-        ports_to_try.append((SMTP_HOST, 587, "starttls"))
-    else:
-        ports_to_try.append((SMTP_HOST, SMTP_PORT, "starttls"))
-        ports_to_try.append((SMTP_HOST, 465, "ssl"))
-
-    for host, port, mode in ports_to_try:
-        try:
-            if mode == "ssl":
-                with smtplib.SMTP_SSL(host, port, timeout=10) as server:
-                    server.login(SMTP_USER, SMTP_PASS)
-                    server.send_message(msg)
-            else:
-                with smtplib.SMTP(host, port, timeout=10) as server:
-                    server.starttls()
-                    server.login(SMTP_USER, SMTP_PASS)
-                    server.send_message(msg)
-            return  # 成功
-        except smtplib.SMTPAuthenticationError:
-            raise HTTPException(500, "邮件服务认证失败，请检查授权码")
-        except Exception as e:
-            errors.append(f"{host}:{port}({mode}): {e}")
-            continue
-
-    raise HTTPException(500, f"邮件发送失败: {'; '.join(errors)}")
+    if resp.status_code not in (200, 201):
+        detail = resp.json().get("message", resp.text)
+        raise HTTPException(500, f"邮件发送失败: {detail}")
 
 # 验证码缓存 { email: { code, expire_at } }
 verify_codes: dict = {}
