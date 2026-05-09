@@ -45,9 +45,9 @@ BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 USERS_FILE = DATA_DIR / "users.json"
 
 # ── SMTP 邮件配置 ──────────────────────────────────────────────────────────
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp-relay.brevo.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "liuxixi@deepnovis.com.cn")
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.163.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = os.environ.get("SMTP_USER", "deepnovis@163.com")
 SMTP_PASS = os.environ.get("SMTP_PASS", "")
 
 
