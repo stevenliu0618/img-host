@@ -386,7 +386,6 @@
     </div>
   </nav>
   <div style="display:flex;gap:12px;align-items:center;position:relative;">
-    <span class="badge">GPT-Image-2 · 0.1元/张</span>
     <div id="authArea">
       <button class="btn-sm btn-sm-blue" id="loginBtn" style="display:none;"><i class="fa-regular fa-circle-user"></i> 登录</button>
       <div id="userArea" style="display:none;position:relative;">
@@ -398,8 +397,6 @@
         <div class="user-menu" id="userMenu">
           <div class="user-menu-item"><i class="fa-regular fa-user"></i> <span id="menuUserName">用户</span></div>
           <div class="user-menu-divider"></div>
-          <div class="user-menu-item" id="apiSettingsBtn"><i class="fa-solid fa-key"></i> API 设置</div>
-          <div class="user-menu-divider"></div>
           <div class="user-menu-item danger" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> 退出登录</div>
         </div>
       </div>
@@ -409,8 +406,8 @@
 
 <div class="container">
 
-  <div class="page-title">GPT-Image-2</div>
-  <div class="page-sub">基于速创 API 的 AI 生图工具</div>
+  <div class="page-title">AI 绘图</div>
+  <div class="page-sub">输入提示词，AI 帮你生成图片</div>
 
   <!-- 生图区 -->
   <div class="card">
@@ -486,18 +483,6 @@
     </div>
   </div>
 
-  <!-- 配置状态 -->
-  <div class="card">
-    <div class="card-title"><i class="fa-solid fa-sliders" style="margin-right:4px;"></i>配置</div>
-    <div class="key-status" style="padding:4px 0;">
-      <div>
-        <div class="key-label">API Key</div>
-        <div class="key-hint" id="keyHintText">在用户菜单 → API 设置中配置</div>
-      </div>
-      <span class="key-indicator" id="keyIndicator">检测中…</span>
-    </div>
-  </div>
-
   <!-- 历史记录 -->
   <div class="card">
     <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
@@ -552,26 +537,6 @@
   </div>
 </div>
 
-<!-- API 设置弹窗 -->
-<div class="modal-overlay" id="apiSettingsModal">
-  <div class="modal-box">
-    <h2>API 设置</h2>
-    <div class="modal-sub">配置速创 API Key，Key 仅保存在服务端，安全隔离</div>
-    <div class="auth-error" id="apiSettingsError"></div>
-    <div class="form-group">
-      <label class="form-label">速创 API Key</label>
-      <input type="password" id="apiKeyInput" placeholder="输入你的 API Key" />
-      <div style="font-size:12px;color:var(--dim);margin-top:6px;">Key 不会返回给前端，仅用于生图请求</div>
-    </div>
-    <div class="form-row" style="gap:10px;">
-      <button class="btn btn-primary" id="apiSettingsSaveBtn" style="flex:2;">
-        <span id="apiSettingsSaveText">保存</span>
-      </button>
-      <button class="btn-secondary" id="apiSettingsCancelBtn" style="flex:1;text-align:center;">取消</button>
-    </div>
-  </div>
-</div>
-
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -597,7 +562,6 @@
   const clearHistoryBtn = $('#clearHistoryBtn')
   
   const toast = $('#toast')
-  const keyIndicator = $('#keyIndicator')
   // ── 状态 ──
   let polling = false
   let pollTimer = null
@@ -656,7 +620,7 @@
   function showResult(url) {
     currentResult = url; resultArea.classList.add('show')
     resultImg.src = url; resultUrl.textContent = url
-    hideStatus(); genBtn.disabled = false; genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图片'
+    hideStatus(); genBtn.disabled = false; genBtnText.textContent = '生成图片'
   }
   function hideResult() { resultArea.classList.remove('show'); currentResult = null }
 
@@ -869,7 +833,6 @@
       currentUser = d.username
       hideAuthModal()
       showToast(d.msg)
-      fetchKeyStatus()
     } catch (e) {
       errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show')
     }
@@ -898,59 +861,7 @@
     saveAuth(null, '')
     $('#userMenu').classList.remove('show')
     showToast('已退出登录')
-    keyIndicator.textContent = '请先登录'; keyIndicator.style.color = 'var(--orange)'
   })
-
-  // ── API 设置弹窗 ──
-  $('#apiSettingsBtn').addEventListener('click', () => {
-    $('#userMenu').classList.remove('show')
-    $('#apiSettingsError').classList.remove('show')
-    $('#apiKeyInput').value = ''
-    $('#apiSettingsModal').classList.add('show')
-    $('#apiKeyInput').focus()
-  })
-  $('#apiSettingsCancelBtn').addEventListener('click', () => $('#apiSettingsModal').classList.remove('show'))
-  $('#apiSettingsModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) $('#apiSettingsModal').classList.remove('show') })
-
-  $('#apiSettingsSaveBtn').addEventListener('click', async () => {
-    const key = $('#apiKeyInput').value.trim()
-    const errEl = $('#apiSettingsError')
-    if (!key) { errEl.textContent = '请输入 API Key'; errEl.classList.add('show'); return }
-    if (key.length < 8) { errEl.textContent = 'API Key 格式不正确'; errEl.classList.add('show'); return }
-
-    const btn = $('#apiSettingsSaveBtn'); const btnText = $('#apiSettingsSaveText')
-    btn.disabled = true; btnText.textContent = '保存中…'
-
-    try {
-      const r = await authFetch('/api/auth/settings', {
-        method: 'POST',
-        body: JSON.stringify({ gpt_api_key: key })
-      })
-      const d = await r.json()
-      if (!r.ok) throw new Error(d.detail || '保存失败')
-      $('#apiSettingsModal').classList.remove('show')
-      showToast('API Key 已保存')
-      fetchKeyStatus()
-    } catch (e) {
-      errEl.textContent = e.message; errEl.classList.add('show')
-    }
-    btn.disabled = false; btnText.textContent = '保存'
-  })
-
-  // ── 检查 API Key 状态 ──
-  async function fetchKeyStatus() {
-    if (!authToken) { keyIndicator.textContent = '请先登录'; keyIndicator.style.color = 'var(--orange)'; return }
-    try {
-      const r = await authFetch('/api/gpt/status'); const d = await r.json()
-      if (d.ready) {
-        keyIndicator.textContent = '✓ 已配置'; keyIndicator.style.color = 'var(--green)'
-      } else {
-        keyIndicator.textContent = '未配置，请设置'; keyIndicator.style.color = 'var(--orange)'
-      }
-    } catch {
-      keyIndicator.textContent = '无法连接'; keyIndicator.style.color = 'var(--red)'
-    }
-  }
 
   // ── 生成 ──
   genBtn.addEventListener('click', async () => {
@@ -1001,7 +912,7 @@
         } catch (e) {
           setStatus('error', '查询出错: ' + e.message, 'fa-circle-exclamation')
           genBtn.disabled = false
-          genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 重新生成'
+          genBtnText.innerHTML = '重新生成'
           polling = false
         }
       }
@@ -1010,7 +921,7 @@
     } catch (e) {
       setStatus('error', e.message, 'fa-circle-exclamation')
       genBtn.disabled = false
-      genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 重新生成'
+      genBtnText.textContent = '重新生成'
     }
   })
 
@@ -1025,7 +936,6 @@
   // ── 初始化 ──
   renderAuthUI()
   renderHistory()
-  fetchKeyStatus()
 })()
 </script>
 
