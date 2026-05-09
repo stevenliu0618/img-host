@@ -484,15 +484,15 @@
     </div>
   </div>
 
-  <!-- 配置状态 -->
+  <!-- 配置状态（纯服务端，前端零接触） -->
   <div class="card">
     <div class="card-title"><i class="fa-solid fa-sliders" style="margin-right:4px;"></i>配置</div>
-    <div class="key-status" id="keyConfigRow">
+    <div class="key-status" style="padding:4px 0;">
       <div>
         <div class="key-label">API Key</div>
-        <div class="key-hint" id="keyHintText">服务端已配置，无需前端设置</div>
+        <div class="key-hint" id="keyHintText">服务端安全保存，前端零接触</div>
       </div>
-      <span class="key-indicator" id="keyIndicator">检测中…</span>
+      <span class="key-indicator" id="keyIndicator" style="color:var(--green);">✓ 已配置</span>
     </div>
   </div>
 
@@ -556,7 +556,7 @@
   const downloadBtn = $('#downloadBtn')
   const historyList = $('#historyList')
   const clearHistoryBtn = $('#clearHistoryBtn')
-  const keyIndicator = $('#keyIndicator')
+  
   const toast = $('#toast')
 
   // ── 状态 ──
@@ -810,22 +810,6 @@
     $('#userMenu').classList.remove('show')
     showToast('已退出登录')
   })
-
-  // ── 检查服务端 API Key 状态 ──
-  async function fetchKeyStatus() {
-    try {
-      const r = await authFetch('/api/gpt/status'); const d = await r.json()
-      if (r.status === 401) { keyIndicator.textContent = '请先登录'; keyIndicator.style.color = 'var(--orange)'; return }
-      if (d.ready) {
-        keyIndicator.textContent = '✓ ' + d.keyHint; keyIndicator.style.color = 'var(--green)'
-      } else {
-        keyIndicator.textContent = '⚠️ 未配置'; keyIndicator.style.color = 'var(--red)'
-      }
-    } catch {
-      keyIndicator.textContent = '无法连接服务'; keyIndicator.style.color = 'var(--red)'
-    }
-  }
-  fetchKeyStatus()
 
   // ── 生成 ──
   genBtn.addEventListener('click', async () => {

@@ -329,10 +329,9 @@ GPTIMAGE_API_KEY = "z257spNXb7V9nbYpIiH5JMh3VM"
 
 @app.get("/api/gpt/status")
 async def gpt_status(payload: dict = Depends(verify_token)):
-    """查询 API Key 配置状态（不暴露完整 Key）。"""
+    """查询 API Key 配置状态（不暴露任何 Key 信息）。"""
     return JSONResponse({
         "ready": True,
-        "keyHint": GPTIMAGE_API_KEY[:8] + "…",
     })
 
 
@@ -361,9 +360,19 @@ async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     }
 
     try:
-        resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=60)
         data = resp.json()
-        return JSONResponse(content=data)
+
+        # 提取关键字段返回，不透传原始响应
+        task_id = data.get("data", {}).get("id") or data.get("id")
+        code = data.get("code", resp.status_code)
+        msg = data.get("msg") or data.get("message", "")
+
+        return JSONResponse({
+            "code": code,
+            "msg": msg,
+            "data": {"id": task_id} if task_id else None,
+        })
     except http_requests.Timeout:
         raise HTTPException(502, "第三方 API 超时")
     except Exception as e:
