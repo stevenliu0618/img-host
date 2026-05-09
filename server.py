@@ -5,6 +5,10 @@ import mimetypes
 import base64
 import hashlib
 import json
+import smtplib
+import random
+import time
+from email.mime.text import MIMEText
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -39,6 +43,16 @@ JWT_ALGO = "HS256"
 JWT_EXPIRE_HOURS = 72
 BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 USERS_FILE = DATA_DIR / "users.json"
+
+# ── SMTP 邮件配置 ──────────────────────────────────────────────────────────
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.qq.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = os.environ.get("SMTP_USER", "liuxixi@deepnovis.com.cn")
+SMTP_PASS = os.environ.get("SMTP_PASS", "gfeKYWqDiUZFzvfd")
+
+# 验证码缓存 { email: { code, expire_at } }
+verify_codes: dict = {}
+CODE_EXPIRE_SECONDS = 300  # 5 分钟
 
 
 def _load_users() -> dict:
@@ -263,60 +277,116 @@ async def health():
 
 # ── 用户认证 API ────────────────────────────────────────────────────────────
 
-@app.post("/api/auth/register")
-async def register(body: dict):
-    """注册新用户。"""
-    username = (body.get("username") or "").strip()
-    password = (body.get("password") or "").strip()
-    if not username or not password:
-        raise HTTPException(400, "用户名和密码不能为空")
-    if len(username) < 2 or len(username) > 20:
-        raise HTTPException(400, "用户名长度需在 2-20 个字符之间")
-    if len(password) < 6:
-        raise HTTPException(400, "密码长度至少 6 位")
-    if not re.match(r"^[a-zA-Z0-9_\u4e00-\u9fff]+$", username):
-        raise HTTPException(400, "用户名只能包含字母、数字、下划线和中文")
+@app.post("/api/auth/send-code")
+async def send_code(body: dict):
+    """发送邮箱验证码。"""
+    email = (body.get("email") or "").strip().lower()
+    if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        raise HTTPException(400, "请输入有效的邮箱地址")
 
-    users = _load_users()
-    if username in users:
-        raise HTTPException(409, "用户名已被注册")
+    # 限制频率：同一邮箱 60 秒内只能发一次
+    now = time.time()
+    existing = verify_codes.get(email)
+    if existing and now - existing.get("sent_at", 0) < 60:
+        remaining = int(60 - (now - existing["sent_at"]))
+        raise HTTPException(429, f"请 {remaining} 秒后再试")
 
-    users[username] = {
-        "password": BCRYPT.hash(password),
-        "created_at": datetime.now().isoformat(),
-        "avatar": "",
-    }
-    _save_users(users)
+    # 生成 6 位验证码
+    code = "".join(random.choices("0123456789", k=6))
 
-    token = create_token(username)
-    return JSONResponse({"token": token, "username": username, "msg": "注册成功"})
+    # 发送邮件
+    try:
+        msg = MIMEText(
+            f"""<div style="font-family:-apple-system,sans-serif;padding:24px;max-width:400px;margin:0 auto;">
+<h2 style="font-size:18px;margin-bottom:12px;">DeepNovis 登录验证</h2>
+<p style="font-size:14px;color:#555;margin-bottom:20px;">你的验证码为：</p>
+<div style="font-size:36px;font-weight:700;letter-spacing:8px;text-align:center;color:#0071e3;padding:16px;background:#f5f5f7;border-radius:12px;">{code}</div>
+<p style="font-size:12px;color:#999;margin-top:20px;">验证码 5 分钟内有效，请勿泄露给他人。</p>
+</div>""",
+            "html", "utf-8")
+        msg["Subject"] = f"DeepNovis 登录验证码 · {code}"
+        msg["From"] = SMTP_USER
+        msg["To"] = email
+
+        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.send_message(msg)
+
+        verify_codes[email] = {
+            "code": code,
+            "sent_at": now,
+            "expire_at": now + CODE_EXPIRE_SECONDS,
+        }
+        return JSONResponse({"msg": "验证码已发送", "email": email})
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(500, "邮件服务认证失败，请联系管理员")
+    except smtplib.SMTPException as e:
+        raise HTTPException(500, f"邮件发送失败: {e}")
+    except Exception as e:
+        raise HTTPException(500, f"发送失败: {e}")
 
 
 @app.post("/api/auth/login")
-async def login(body: dict):
-    """用户登录。"""
-    username = (body.get("username") or "").strip()
-    password = (body.get("password") or "").strip()
-    if not username or not password:
-        raise HTTPException(400, "用户名和密码不能为空")
+async def auth_login(body: dict):
+    """邮箱 + 验证码登录/注册。新用户自动注册。"""
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
 
+    if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        raise HTTPException(400, "请输入有效的邮箱地址")
+    if not code or len(code) != 6 or not code.isdigit():
+        raise HTTPException(400, "请输入 6 位验证码")
+
+    # 校验验证码
+    cached = verify_codes.get(email)
+    if not cached:
+        raise HTTPException(400, "请先获取验证码")
+    if time.time() > cached["expire_at"]:
+        verify_codes.pop(email, None)
+        raise HTTPException(400, "验证码已过期，请重新获取")
+    if cached["code"] != code:
+        raise HTTPException(400, "验证码错误")
+
+    # 验证码正确后清除
+    verify_codes.pop(email, None)
+
+    # 用户不存在则自动注册
     users = _load_users()
-    user = users.get(username)
-    if not user or not BCRYPT.verify(password, user["password"]):
-        raise HTTPException(401, "用户名或密码错误")
+    if email not in users:
+        # 从邮箱前缀取用户名
+        username = email.split("@")[0]
+        users[email] = {
+            "password": "",  # 邮箱验证不需要密码
+            "email": email,
+            "username": username,
+            "created_at": datetime.now().isoformat(),
+            "gpt_api_key": "",
+        }
+        _save_users(users)
+        is_new = True
+    else:
+        is_new = False
+        username = users[email].get("username", email.split("@")[0])
 
-    token = create_token(username)
-    return JSONResponse({"token": token, "username": username, "msg": "登录成功"})
+    token = create_token(email)
+    return JSONResponse({
+        "token": token,
+        "username": username,
+        "email": email,
+        "msg": "登录成功" if not is_new else "注册成功",
+        "is_new": is_new,
+    })
 
 
 @app.get("/api/auth/me")
 async def auth_me(payload: dict = Depends(verify_token)):
     """获取当前登录用户信息。"""
-    username = payload["sub"]
+    email = payload["sub"]
     users = _load_users()
-    user = users.get(username, {})
+    user = users.get(email, {})
     return JSONResponse({
-        "username": username,
+        "username": user.get("username", email.split("@")[0]),
+        "email": email,
         "created_at": user.get("created_at", ""),
         "api_key_configured": bool(user.get("gpt_api_key", "")),
     })
@@ -325,14 +395,18 @@ async def auth_me(payload: dict = Depends(verify_token)):
 @app.post("/api/auth/settings")
 async def update_settings(body: dict, payload: dict = Depends(verify_token)):
     """更新用户设置（API Key 等），Key 服务端加密存储，不返回给前端。"""
-    username = payload["sub"]
+    email = payload["sub"]
     users = _load_users()
-    if username not in users:
+    if email not in users:
         raise HTTPException(404, "用户不存在")
 
     if "gpt_api_key" in body:
         key = (body["gpt_api_key"] or "").strip()
-        users[username]["gpt_api_key"] = key
+        users[email]["gpt_api_key"] = key
+    if "username" in body:
+        name = (body["username"] or "").strip()
+        if 2 <= len(name) <= 20:
+            users[email]["username"] = name
 
     _save_users(users)
     return JSONResponse({"msg": "设置已保存"})

@@ -514,23 +514,40 @@
 <!-- Auth Modal -->
 <div class="modal-overlay" id="authModal">
   <div class="modal-box">
-    <h2 id="authModalTitle">登录</h2>
-    <div class="modal-sub" id="authModalSub">登录后即可使用 AI 绘图</div>
+    <h2 id="authModalTitle">登录 DeepNovis</h2>
+    <div class="modal-sub" id="authModalSub">输入邮箱获取验证码，新用户自动注册</div>
     <div class="auth-error" id="authError"></div>
-    <div class="form-group">
-      <label class="form-label">用户名</label>
-      <input type="text" id="authUsername" placeholder="输入用户名" autocomplete="username" />
+
+    <!-- 步骤 1：输入邮箱 -->
+    <div id="authStepEmail">
+      <div class="form-group">
+        <label class="form-label">邮箱地址</label>
+        <input type="email" id="authEmail" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <button class="btn btn-primary" id="authSendCodeBtn">
+        <span id="authSendCodeText">获取验证码</span>
+      </button>
     </div>
-    <div class="form-group">
-      <label class="form-label">密码</label>
-      <input type="password" id="authPassword" placeholder="输入密码" autocomplete="current-password" />
-    </div>
-    <button class="btn btn-primary" id="authSubmitBtn">
-      <span id="authSubmitText">登录</span>
-    </button>
-    <div class="auth-switch">
-      <span id="authSwitchText">还没有账号？</span>
-      <a id="authSwitchLink">注册</a>
+
+    <!-- 步骤 2：输入验证码 -->
+    <div id="authStepCode" style="display:none;">
+      <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
+        验证码已发送至 <strong id="authCodeEmail" style="color:var(--text);"></strong>
+      </div>
+      <div class="form-group">
+        <label class="form-label">验证码</label>
+        <input type="text" id="authCode" placeholder="输入 6 位验证码" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+          style="font-size:24px;letter-spacing:8px;text-align:center;font-weight:600;" />
+      </div>
+      <button class="btn btn-primary" id="authLoginBtn">
+        <span id="authLoginText">登录</span>
+      </button>
+      <div class="auth-switch">
+        <a id="authChangeEmail">更换邮箱</a>
+        <span style="margin:0 8px;color:var(--border);">·</span>
+        <a id="authResendCode">重新发送</a>
+        <span id="authCountdown" style="color:var(--dim);font-size:12px;"></span>
+      </div>
     </div>
   </div>
 </div>
@@ -758,18 +775,22 @@
     renderAuthUI()
   }
 
-  function showAuthModal(mode) {
+  function showAuthModal() {
     const modal = $('#authModal')
     modal.classList.add('show')
-    $('#authModalTitle').textContent = mode === 'register' ? '注册' : '登录'
-    $('#authModalSub').textContent = mode === 'register' ? '创建账号后即可使用 AI 绘图' : '登录后即可使用 AI 绘图'
-    $('#authSubmitText').textContent = mode === 'register' ? '注册' : '登录'
-    $('#authSwitchText').textContent = mode === 'register' ? '已有账号？' : '还没有账号？'
-    $('#authSwitchLink').textContent = mode === 'register' ? '登录' : '注册'
     $('#authError').classList.remove('show'); $('#authError').textContent = ''
-    $('#authUsername').value = ''; $('#authPassword').value = ''
-    $('#authUsername').focus()
-    modal._mode = mode
+    $('#authEmail').value = ''
+    $('#authStepEmail').style.display = ''
+    $('#authStepCode').style.display = 'none'
+    $('#authEmail').focus()
+  }
+
+  function showCodeStep(email) {
+    $('#authStepEmail').style.display = 'none'
+    $('#authStepCode').style.display = ''
+    $('#authCodeEmail').textContent = email
+    $('#authCode').value = ''
+    $('#authCode').focus()
   }
 
   function hideAuthModal() { $('#authModal').classList.remove('show') }
@@ -787,43 +808,88 @@
   }
 
   // ── Auth 模态框 ──
-  $('#loginBtn').addEventListener('click', () => showAuthModal('login'))
-  $('#authSwitchLink').addEventListener('click', (e) => {
-    const modal = $('#authModal')
-    showAuthModal(modal._mode === 'register' ? 'login' : 'register')
-  })
-  $('#authSubmitBtn').addEventListener('click', async () => {
-    const modal = $('#authModal')
-    const mode = modal._mode || 'login'
-    const username = $('#authUsername').value.trim()
-    const password = $('#authPassword').value
+  let authEmail = ''
+
+  $('#loginBtn').addEventListener('click', () => showAuthModal())
+
+  // 获取验证码
+  $('#authSendCodeBtn').addEventListener('click', async () => {
+    const email = $('#authEmail').value.trim()
     const errEl = $('#authError')
+    if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; errEl.classList.add('show'); return }
 
-    if (!username || !password) { errEl.textContent = '请填写用户名和密码'; errEl.classList.add('show'); return }
-
-    const btn = $('#authSubmitBtn'); const btnText = $('#authSubmitText')
-    btn.disabled = true; btnText.textContent = '处理中…'
+    const btn = $('#authSendCodeBtn'); const btnText = $('#authSendCodeText')
+    btn.disabled = true; btnText.textContent = '发送中…'
 
     try {
-      const r = await fetch('/api/auth/' + mode, {
+      const r = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password })
+        body: JSON.stringify({ email })
       })
       const d = await r.json()
-      if (!r.ok) { errEl.textContent = d.detail || '操作失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = mode === 'register' ? '注册' : '登录'; return }
+      if (!r.ok) throw new Error(d.detail || '发送失败')
+      authEmail = email
+      showCodeStep(email)
+      // 60 秒倒计时
+      let sec = 60
+      const cd = $('#authCountdown')
+      const rs = $('#authResendCode')
+      rs.style.pointerEvents = 'none'; rs.style.color = 'var(--dim)'
+      const iv = setInterval(() => {
+        sec--
+        if (sec <= 0) { clearInterval(iv); cd.textContent = ''; rs.style.pointerEvents = ''; rs.style.color = 'var(--accent)'; return }
+        cd.textContent = `(${sec}s)`
+      }, 1000)
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show')
+    }
+    btn.disabled = false; btnText.textContent = '获取验证码'
+  })
+
+  // 登录/注册
+  $('#authLoginBtn').addEventListener('click', async () => {
+    const code = $('#authCode').value.trim()
+    const errEl = $('#authError')
+    if (!code || code.length !== 6) { errEl.textContent = '请输入 6 位验证码'; errEl.classList.add('show'); return }
+
+    const btn = $('#authLoginBtn'); const btnText = $('#authLoginText')
+    btn.disabled = true; btnText.textContent = '验证中…'
+
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail, code })
+      })
+      const d = await r.json()
+      if (!r.ok) { errEl.textContent = d.detail || '登录失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = '登录'; return }
+
       saveAuth(d.token, d.username)
+      currentUser = d.username
       hideAuthModal()
       showToast(d.msg)
       fetchKeyStatus()
     } catch (e) {
       errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show')
     }
-    btn.disabled = false; btnText.textContent = mode === 'register' ? '注册' : '登录'
+    btn.disabled = false; btnText.textContent = '登录'
+  })
+
+  // 回车 → 提交
+  $('#authEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authSendCodeBtn').click() })
+  $('#authCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authLoginBtn').click() })
+  // 自动识别 6 位码
+  $('#authCode').addEventListener('input', (e) => { if (e.target.value.length === 6) $('#authLoginBtn').click() })
+
+  // 更换邮箱 / 重新发送
+  $('#authChangeEmail').addEventListener('click', () => showAuthModal())
+  $('#authResendCode').addEventListener('click', () => {
+    if (!authEmail) return
+    $('#authSendCodeBtn').click()
   })
 
   $('#authModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) hideAuthModal() })
-  $('#authPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authSubmitBtn').click() })
 
   // ── 用户菜单 ──
   $('#userBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#userMenu').classList.toggle('show') })
