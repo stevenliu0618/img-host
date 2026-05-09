@@ -13,6 +13,9 @@ from datetime import datetime, timedelta
 import requests as http_requests
 import jwt as pyjwt
 import bcrypt as _bcrypt
+import psycopg2
+from psycopg2.extras import DictCursor
+from psycopg2 import pool
 from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,13 +42,137 @@ app.add_middleware(
 JWT_SECRET = os.environ.get("JWT_SECRET", "deepnovis-jwt-secret-change-me")
 JWT_ALGO = "HS256"
 JWT_EXPIRE_HOURS = 72
-USERS_FILE = DATA_DIR / "users.json"
+# ── PostgreSQL 配置 ──────────────────────────────────────────────────────
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+_db_pool = None
 
+def _init_db_pool():
+    """初始化 PostgreSQL 连接池（启动时调用一次）。"""
+    global _db_pool
+    if not DATABASE_URL:
+        return False
+    try:
+        _db_pool = pool.SimpleConnectionPool(
+            minconn=1,
+            maxconn=10,
+            dsn=DATABASE_URL,
+        )
+        return True
+    except Exception:
+        return False
 
+def _get_conn():
+    """从连接池取一个连接，用完后必须调用 putconn。"""
+    if not _db_pool:
+        raise HTTPException(500, "数据库未配置")
+    return _db_pool.getconn()
+
+def _put_conn(conn):
+    if conn and _db_pool:
+        _db_pool.putconn(conn)
+
+def init_db():
+    """建表（启动时调用）。"""
+    if not DATABASE_URL:
+        return
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                email       TEXT PRIMARY KEY,
+                password    TEXT NOT NULL,
+                username    TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                gpt_api_key TEXT NOT NULL DEFAULT ''
+            );
+        """)
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, f"数据库初始化失败: {e}")
+    finally:
+        _put_conn(conn)
+
+def _row_to_user(row) -> dict:
+    return {
+        "password": row["password"],
+        "email": row["email"],
+        "username": row["username"],
+        "created_at": row["created_at"],
+        "gpt_api_key": row["gpt_api_key"] or "",
+    }
+
+def db_get_user(email: str) -> dict | None:
+    """按 email 查用户，不存在返回 None。"""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor(cursor_factory=DictCursor)
+        cur.execute("SELECT * FROM users WHERE email = %s", (email,))
+        row = cur.fetchone()
+        cur.close()
+        return _row_to_user(row) if row else None
+    finally:
+        _put_conn(conn)
+
+def db_user_exists(email: str) -> bool:
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM users WHERE email = %s", (email,))
+        exists = cur.fetchone() is not None
+        cur.close()
+        return exists
+    finally:
+        _put_conn(conn)
+
+def db_create_user(email: str, password_hash: str, username: str):
+    """插入新用户。"""
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO users (email, password, username, created_at, gpt_api_key) VALUES (%s, %s, %s, %s, %s)",
+            (email, password_hash, username, datetime.now().isoformat(), ""),
+        )
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, f"创建用户失败: {e}")
+    finally:
+        _put_conn(conn)
+
+def db_update_user(email: str, **fields):
+    """更新用户字段（gpt_api_key、username 等）。"""
+    if not fields:
+        return
+    sets = ", ".join(f"{k} = %s" for k in fields)
+    vals = list(fields.values())
+    vals.append(email)
+    conn = _get_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(f"UPDATE users SET {sets} WHERE email = %s", vals)
+        conn.commit()
+        cur.close()
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(500, f"更新用户失败: {e}")
+    finally:
+        _put_conn(conn)
+
+# ── FastAPI 启动事件 ────────────────────────────────────────────────────
+@app.on_event("startup")
+async def _startup():
+    _init_db_pool()
+    init_db()
+
+# ── 密码工具函数 ──────────────────────────────────────────────────────────
 def _hash_password(password: str) -> str:
     """
     bcrypt 有 72 字节限制，先 SHA-256 再 hash，支持任意长度密码。
-    使用 bcrypt 直接替代 passlib（passlib 与 bcrypt 5.x 不兼容）。
     """
     digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
     return _bcrypt.hashpw(digest.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
@@ -56,24 +183,20 @@ def _verify_password(password: str, hashed: str) -> bool:
     验证密码：先试 SHA-256 预处理（新注册用户），
     不匹配则试原始密码（兼容旧格式）。
     """
-    # 新格式：sha256(password) → bcrypt
     try:
         digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
         if _bcrypt.checkpw(digest.encode("utf-8"), hashed.encode("utf-8")):
             return True
     except Exception:
         pass
-    # 旧格式：直接 password → bcrypt
     try:
         return _bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
     except Exception:
         return False
-    except Exception:
-        return False
+
 
 # ── Resend 邮件配置 ──────────────────────────────────────────────────────
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
-
 
 def _send_email(to: str, subject: str, html: str):
     """通过 Resend API 发送邮件。"""
@@ -106,18 +229,6 @@ def _send_email(to: str, subject: str, html: str):
 verify_codes: dict = {}
 CODE_EXPIRE_SECONDS = 300  # 5 分钟
 
-
-def _load_users() -> dict:
-    if USERS_FILE.exists():
-        return json.loads(USERS_FILE.read_text(encoding="utf-8"))
-    return {}
-
-
-def _save_users(users: dict):
-    USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    USERS_FILE.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
 def create_token(username: str) -> str:
     payload = {
         "sub": username,
@@ -125,7 +236,6 @@ def create_token(username: str) -> str:
         "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
     }
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
-
 
 def verify_token(authorization: str | None = Header(None)) -> dict:
     """验证 JWT token，返回用户信息。未认证时直接 401。"""
@@ -143,7 +253,6 @@ def verify_token(authorization: str | None = Header(None)) -> dict:
         raise HTTPException(401, "无效的登录凭证")
     except Exception:
         raise HTTPException(401, "认证失败")
-
 
 def optional_auth(authorization: str | None = Header(None)) -> dict | None:
     """可选认证，无 token 时返回 None 不报错。"""
@@ -163,12 +272,10 @@ def safe_filename(name: str) -> str:
         stem = "image"
     return f"{stem}{ext.lower()}"
 
-
 def get_github():
     if not GITHUB_TOKEN:
         raise HTTPException(500, "未配置 GITHUB_TOKEN 环境变量")
     return Github(GITHUB_TOKEN)
-
 
 def push_to_github(filename: str, file_bytes: bytes):
     """通过 GitHub API 把图片推送到仓库。"""
@@ -191,7 +298,6 @@ def push_to_github(filename: str, file_bytes: bytes):
     else:
         repo.create_file(path, msg, b64)
 
-
 def delete_from_github(filename: str):
     """通过 GitHub API 删除图片。"""
     g = get_github()
@@ -205,19 +311,16 @@ def delete_from_github(filename: str):
             raise HTTPException(404, "文件不存在")
         raise HTTPException(500, f"GitHub API 错误: {e}")
 
-
 # ── 路由 ─────────────────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 async def index():
     html_path = Path(__file__).parent / "templates" / "index.html"
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
 
-
 @app.get("/prompt-editor", response_class=HTMLResponse)
 async def prompt_editor():
     html_path = Path(__file__).parent / "templates" / "prompt-editor.html"
     return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
-
 
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
@@ -254,7 +357,6 @@ async def upload(file: UploadFile = File(...)):
         "url": url,
         "markdown": f"![]({url})",
     })
-
 
 @app.get("/api/images")
 async def list_images():
@@ -305,7 +407,6 @@ async def list_images():
             return JSONResponse({"images": images})
         return JSONResponse({"images": []})
 
-
 @app.delete("/api/images/{filename}")
 async def delete_image(filename: str):
     safe_name = Path(filename).name
@@ -321,11 +422,9 @@ async def delete_image(filename: str):
     target.unlink(missing_ok=True)
     return JSONResponse({"ok": True, "filename": safe_name})
 
-
 @app.get("/api/health")
 async def health():
     return JSONResponse({"status": "ok", "github_configured": bool(GITHUB_TOKEN)})
-
 
 # ── 用户认证 API ────────────────────────────────────────────────────────────
 
@@ -370,7 +469,6 @@ async def send_code(body: dict):
     except Exception as e:
         raise HTTPException(500, f"邮件发送失败: {e}")
 
-
 @app.post("/api/auth/register")
 async def auth_register(body: dict):
     """邮箱 + 验证码 + 密码 → 注册新用户。"""
@@ -398,19 +496,11 @@ async def auth_register(body: dict):
     # 验证码正确后清除
     verify_codes.pop(email, None)
 
-    users = _load_users()
-    if email in users:
+    if db_user_exists(email):
         raise HTTPException(400, "该邮箱已注册，请直接登录")
 
     username = email.split("@")[0]
-    users[email] = {
-        "password": _hash_password(password),
-        "email": email,
-        "username": username,
-        "created_at": datetime.now().isoformat(),
-        "gpt_api_key": "",
-    }
-    _save_users(users)
+    db_create_user(email, _hash_password(password), username)
 
     token = create_token(email)
     return JSONResponse({
@@ -419,7 +509,6 @@ async def auth_register(body: dict):
         "email": email,
         "msg": "注册成功",
     })
-
 
 @app.post("/api/auth/login")
 async def auth_login(body: dict):
@@ -432,8 +521,7 @@ async def auth_login(body: dict):
     if not password:
         raise HTTPException(400, "请输入密码")
 
-    users = _load_users()
-    user = users.get(email)
+    user = db_get_user(email)
     if not user:
         raise HTTPException(400, "该邮箱未注册，请先注册")
 
@@ -452,13 +540,11 @@ async def auth_login(body: dict):
         "msg": "登录成功",
     })
 
-
 @app.get("/api/auth/me")
 async def auth_me(payload: dict = Depends(verify_token)):
     """获取当前登录用户信息。"""
     email = payload["sub"]
-    users = _load_users()
-    user = users.get(email, {})
+    user = db_get_user(email) or {}
     return JSONResponse({
         "username": user.get("username", email.split("@")[0]),
         "email": email,
@@ -466,44 +552,39 @@ async def auth_me(payload: dict = Depends(verify_token)):
         "api_key_configured": bool(user.get("gpt_api_key", "")),
     })
 
-
 @app.post("/api/auth/settings")
 async def update_settings(body: dict, payload: dict = Depends(verify_token)):
     """更新用户设置（API Key 等），Key 服务端加密存储，不返回给前端。"""
     email = payload["sub"]
-    users = _load_users()
-    if email not in users:
+    user = db_get_user(email)
+    if not user:
         raise HTTPException(404, "用户不存在")
 
+    updates = {}
     if "gpt_api_key" in body:
-        key = (body["gpt_api_key"] or "").strip()
-        users[email]["gpt_api_key"] = key
+        updates["gpt_api_key"] = (body["gpt_api_key"] or "").strip()
     if "username" in body:
         name = (body["username"] or "").strip()
         if 2 <= len(name) <= 20:
-            users[email]["username"] = name
-
-    _save_users(users)
+            updates["username"] = name
+    if updates:
+        db_update_user(email, **updates)
     return JSONResponse({"msg": "设置已保存"})
-
 
 # ── GPT-Image-2 代理 API ──────────────────────────────────────────────────
 
 @app.get("/api/gpt/status")
 async def gpt_status(payload: dict = Depends(verify_token)):
     """查询当前用户 API Key 配置状态。"""
-    users = _load_users()
-    user = users.get(payload["sub"], {})
+    user = db_get_user(payload["sub"]) or {}
     return JSONResponse({
         "ready": bool(user.get("gpt_api_key", "")),
     })
 
-
 @app.post("/api/gpt/generate")
 async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     """提交生图任务到 API。"""
-    users = _load_users()
-    user = users.get(payload["sub"], {})
+    user = db_get_user(payload["sub"]) or {}
     api_key = user.get("gpt_api_key", "")
     if not api_key:
         raise HTTPException(400, "请先配置 API Key")
@@ -544,12 +625,10 @@ async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(502, f"请求第三方 API 失败: {e}")
 
-
 @app.get("/api/gpt/result/{task_id}")
 async def gpt_result(task_id: str, payload: dict = Depends(verify_token)):
     """查询生图任务结果。"""
-    users = _load_users()
-    user = users.get(payload["sub"], {})
+    user = db_get_user(payload["sub"]) or {}
     api_key = user.get("gpt_api_key", "")
     if not api_key:
         raise HTTPException(400, "请先配置 API Key")
@@ -589,7 +668,6 @@ async def gpt_result(task_id: str, payload: dict = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(502, f"查询失败: {e}")
 
-
 def _extract_image_url(data: dict) -> str | None:
     """递归扫描响应数据，提取图片 URL。"""
     if not data or not isinstance(data, dict):
@@ -622,7 +700,6 @@ def _extract_image_url(data: dict) -> str | None:
 
     # 深层递归
     return _deep_scan_url(data)
-
 
 def _deep_scan_url(obj, depth=0):
     if depth > 3 or not obj or not isinstance(obj, dict):
