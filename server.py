@@ -45,10 +45,10 @@ BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 USERS_FILE = DATA_DIR / "users.json"
 
 # ── SMTP 邮件配置 ──────────────────────────────────────────────────────────
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.qq.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_HOST = os.environ.get("SMTP_HOST", "smtp-relay.brevo.com")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER", "liuxixi@deepnovis.com.cn")
-SMTP_PASS = os.environ.get("SMTP_PASS", "gfeKYWqDiUZFzvfd")
+SMTP_PASS = os.environ.get("SMTP_PASS", "")
 
 
 def _send_email(to: str, subject: str, html: str):
@@ -60,11 +60,14 @@ def _send_email(to: str, subject: str, html: str):
 
     errors = []
 
-    # 优先使用用户配置的端口，不行再试其他
-    ports_to_try = [(SMTP_HOST, SMTP_PORT, "ssl")]
-    if SMTP_PORT != 465:
-        ports_to_try.append(("smtp.qq.com", 465, "ssl"))
-    ports_to_try.append(("smtp.qq.com", 587, "starttls"))
+    # 优先试配置的端口（SSL 或 STARTTLS），再试备选
+    ports_to_try = []
+    if SMTP_PORT == 465:
+        ports_to_try.append((SMTP_HOST, SMTP_PORT, "ssl"))
+        ports_to_try.append((SMTP_HOST, 587, "starttls"))
+    else:
+        ports_to_try.append((SMTP_HOST, SMTP_PORT, "starttls"))
+        ports_to_try.append((SMTP_HOST, 465, "ssl"))
 
     for host, port, mode in ports_to_try:
         try:
