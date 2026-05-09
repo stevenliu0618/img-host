@@ -392,6 +392,8 @@
         <div class="user-menu" id="userMenu">
           <div class="user-menu-item"><i class="fa-regular fa-user"></i> <span id="menuUserName">用户</span></div>
           <div class="user-menu-divider"></div>
+          <div class="user-menu-item" id="apiSettingsBtn"><i class="fa-solid fa-key"></i> API 设置</div>
+          <div class="user-menu-divider"></div>
           <div class="user-menu-item danger" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> 退出登录</div>
         </div>
       </div>
@@ -443,6 +445,24 @@
     <div class="auth-switch">
       <span id="authSwitchText">还没有账号？</span>
       <a id="authSwitchLink">注册</a>
+    </div>
+  </div>
+</div>
+
+<!-- API 设置弹窗 -->
+<div class="modal-overlay" id="apiSettingsModal">
+  <div class="modal-box">
+    <h2>API 设置</h2>
+    <div class="modal-sub">配置速创 API Key，Key 仅保存在服务端</div>
+    <div class="auth-error" id="apiSettingsError"></div>
+    <div class="form-group">
+      <input type="password" id="apiKeyInput" placeholder="输入速创 API Key" />
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-upload" id="apiSettingsSaveBtn" style="flex:2;justify-content:center;border-radius:12px;">
+        <span id="apiSettingsSaveText">保存</span>
+      </button>
+      <button class="btn-upload" id="apiSettingsCancelBtn" style="flex:1;justify-content:center;border-radius:12px;background:#e0e0e5;color:var(--text);">取消</button>
     </div>
   </div>
 </div>
@@ -757,6 +777,35 @@ document.getElementById('authPassword')?.addEventListener('keydown', (e) => { if
 document.getElementById('userBtn')?.addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('userMenu').classList.toggle('show') });
 document.addEventListener('click', () => document.getElementById('userMenu')?.classList.remove('show'));
 document.getElementById('logoutBtn')?.addEventListener('click', () => { saveAuth(null, ''); document.getElementById('userMenu')?.classList.remove('show'); showToast('已退出登录'); });
+
+// ── API 设置 ──
+document.getElementById('apiSettingsBtn')?.addEventListener('click', () => {
+  document.getElementById('userMenu')?.classList.remove('show');
+  document.getElementById('apiSettingsError')?.classList.remove('show');
+  document.getElementById('apiKeyInput').value = '';
+  document.getElementById('apiSettingsModal').classList.add('show');
+});
+document.getElementById('apiSettingsCancelBtn')?.addEventListener('click', () => document.getElementById('apiSettingsModal').classList.remove('show'));
+document.getElementById('apiSettingsModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) document.getElementById('apiSettingsModal').classList.remove('show') });
+document.getElementById('apiSettingsSaveBtn')?.addEventListener('click', async () => {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  const errEl = document.getElementById('apiSettingsError');
+  if (!key) { errEl.textContent = '请输入 API Key'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('apiSettingsSaveBtn'); const btnText = document.getElementById('apiSettingsSaveText');
+  btn.disabled = true; btnText.textContent = '保存中…';
+  try {
+    const r = await fetch('/api/auth/settings', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gpt_api_key: key })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || '保存失败');
+    document.getElementById('apiSettingsModal').classList.remove('show');
+    showToast('API Key 已保存');
+  } catch(e) { errEl.textContent = e.message; errEl.classList.add('show'); }
+  btn.disabled = false; btnText.textContent = '保存';
+});
 
 // ── 初始化 ────────────────────────────────────────────────────────────────
 loadImages();

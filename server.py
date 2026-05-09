@@ -318,28 +318,51 @@ async def auth_me(payload: dict = Depends(verify_token)):
     return JSONResponse({
         "username": username,
         "created_at": user.get("created_at", ""),
+        "api_key_configured": bool(user.get("gpt_api_key", "")),
     })
+
+
+@app.post("/api/auth/settings")
+async def update_settings(body: dict, payload: dict = Depends(verify_token)):
+    """更新用户设置（API Key 等），Key 服务端加密存储，不返回给前端。"""
+    username = payload["sub"]
+    users = _load_users()
+    if username not in users:
+        raise HTTPException(404, "用户不存在")
+
+    if "gpt_api_key" in body:
+        key = (body["gpt_api_key"] or "").strip()
+        users[username]["gpt_api_key"] = key
+
+    _save_users(users)
+    return JSONResponse({"msg": "设置已保存"})
 
 
 # ── GPT-Image-2 代理 API ──────────────────────────────────────────────────
 
-# 服务端 API Key（硬编码，前端零接触）
-GPTIMAGE_API_KEY = "z257spNXb7V9nbYpIiH5JMh3VM"
+def _get_user_key(username: str) -> str:
+    """获取用户的 API Key。"""
+    users = _load_users()
+    user = users.get(username, {})
+    return user.get("gpt_api_key", "")
 
 
 @app.get("/api/gpt/status")
 async def gpt_status(payload: dict = Depends(verify_token)):
-    """查询 API Key 配置状态（不暴露任何 Key 信息）。"""
+    """查询当前用户 API Key 配置状态。"""
+    key = _get_user_key(payload["sub"])
     return JSONResponse({
-        "ready": True,
+        "ready": bool(key),
     })
 
 
 @app.post("/api/gpt/generate")
 async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     """提交生图任务到速创 API。"""
-    if not GPTIMAGE_API_KEY:
-        raise HTTPException(400, "服务端未配置 API Key")
+    username = payload["sub"]
+    api_key = _get_user_key(username)
+    if not api_key:
+        raise HTTPException(400, "请先在个人中心配置 API Key")
 
     prompt = body.get("prompt", "").strip()
     if not prompt:
@@ -353,9 +376,9 @@ async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     if isinstance(urls, list) and len(urls):
         payload["urls"] = urls
 
-    url = f"https://api.wuyinkeji.com/api/async/image_gpt?key={GPTIMAGE_API_KEY}"
+    url = f"https://api.wuyinkeji.com/api/async/image_gpt?key={api_key}"
     headers = {
-        "Authorization": GPTIMAGE_API_KEY,
+        "Authorization": api_key,
         "Content-Type": "application/json",
     }
 
@@ -382,10 +405,12 @@ async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
 @app.get("/api/gpt/result/{task_id}")
 async def gpt_result(task_id: str, payload: dict = Depends(verify_token)):
     """查询生图任务结果。"""
-    if not GPTIMAGE_API_KEY:
-        raise HTTPException(400, "服务端未配置 API Key")
+    username = payload["sub"]
+    api_key = _get_user_key(username)
+    if not api_key:
+        raise HTTPException(400, "请先在个人中心配置 API Key")
 
-    url = f"https://api.wuyinkeji.com/api/async/detail?key={GPTIMAGE_API_KEY}&id={task_id}"
+    url = f"https://api.wuyinkeji.com/api/async/detail?key={api_key}&id={task_id}"
 
     try:
         resp = http_requests.get(url, timeout=10)
