@@ -397,6 +397,8 @@
         <div class="user-menu" id="userMenu">
           <div class="user-menu-item"><i class="fa-regular fa-user"></i> <span id="menuUserName">用户</span></div>
           <div class="user-menu-divider"></div>
+          <div class="user-menu-item" id="apiSettingsBtn"><i class="fa-solid fa-key"></i> API 设置</div>
+          <div class="user-menu-divider"></div>
           <div class="user-menu-item danger" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> 退出登录</div>
         </div>
       </div>
@@ -499,40 +501,83 @@
 <!-- Auth Modal -->
 <div class="modal-overlay" id="authModal">
   <div class="modal-box">
-    <h2 id="authModalTitle">登录 DeepNovis</h2>
-    <div class="modal-sub" id="authModalSub">输入邮箱获取验证码，新用户自动注册</div>
+    <h2 id="authModalTitle">登录</h2>
+    <div class="modal-sub" id="authModalSub">首次使用请先注册</div>
     <div class="auth-error" id="authError"></div>
 
-    <!-- 步骤 1：输入邮箱 -->
-    <div id="authStepEmail">
+    <!-- 步骤 1：登录（默认） -->
+    <div id="authStepLogin">
       <div class="form-group">
         <label class="form-label">邮箱地址</label>
-        <input type="email" id="authEmail" placeholder="your@email.com" autocomplete="email" />
+        <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
       </div>
-      <button class="btn btn-primary" id="authSendCodeBtn">
-        <span id="authSendCodeText">获取验证码</span>
+      <div class="form-group">
+        <label class="form-label">密码</label>
+        <input type="password" id="loginPassword" placeholder="输入密码" autocomplete="current-password" />
+      </div>
+      <button class="btn btn-primary" id="loginBtn2">
+        <span id="loginBtnText">登录</span>
       </button>
+      <div class="auth-switch">
+        <a id="switchToRegister" style="cursor:pointer;">没有账号？去注册</a>
+      </div>
     </div>
 
-    <!-- 步骤 2：输入验证码 -->
-    <div id="authStepCode" style="display:none;">
+    <!-- 步骤 2：注册 - 输入邮箱 -->
+    <div id="authStepRegEmail" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">邮箱地址</label>
+        <input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <button class="btn btn-primary" id="regSendCodeBtn">
+        <span id="regSendCodeText">获取验证码</span>
+      </button>
+      <div class="auth-switch">
+        <a id="switchToLogin" style="cursor:pointer;">已有账号？去登录</a>
+      </div>
+    </div>
+
+    <!-- 步骤 3：注册 - 验证码 + 设置密码 -->
+    <div id="authStepRegCode" style="display:none;">
       <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
-        验证码已发送至 <strong id="authCodeEmail" style="color:var(--text);"></strong>
+        验证码已发送至 <strong id="regCodeEmail" style="color:var(--text);"></strong>
       </div>
       <div class="form-group">
         <label class="form-label">验证码</label>
-        <input type="text" id="authCode" placeholder="输入 6 位验证码" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+        <input type="text" id="regCode" placeholder="输入 6 位验证码" maxlength="6" inputmode="numeric"
           style="font-size:24px;letter-spacing:8px;text-align:center;font-weight:600;" />
       </div>
-      <button class="btn btn-primary" id="authLoginBtn">
-        <span id="authLoginText">登录</span>
+      <div class="form-group">
+        <label class="form-label">设置密码</label>
+        <input type="password" id="regPassword" placeholder="至少 6 位" autocomplete="new-password" />
+      </div>
+      <button class="btn btn-primary" id="regSubmitBtn">
+        <span id="regSubmitText">注册</span>
       </button>
       <div class="auth-switch">
-        <a id="authChangeEmail">更换邮箱</a>
+        <a id="switchToLogin2" style="cursor:pointer;">已有账号？去登录</a>
         <span style="margin:0 8px;color:var(--border);">·</span>
-        <a id="authResendCode">重新发送</a>
-        <span id="authCountdown" style="color:var(--dim);font-size:12px;"></span>
+        <a id="regResendCode" style="cursor:pointer;">重新发送</a>
+        <span id="regCountdown" style="color:var(--dim);font-size:12px;"></span>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- API 设置弹窗 -->
+<div class="modal-overlay" id="apiSettingsModal">
+  <div class="modal-box">
+    <h2>API 设置</h2>
+    <div class="modal-sub">配置你的 API Key，仅保存在服务端</div>
+    <div class="auth-error" id="apiSettingsError"></div>
+    <div class="form-group">
+      <input type="password" id="apiKeyInput" placeholder="输入 API Key" />
+    </div>
+    <div class="form-row" style="gap:10px;">
+      <button class="btn btn-primary" id="apiSettingsSaveBtn" style="flex:2;">
+        <span id="apiSettingsSaveText">保存</span>
+      </button>
+      <button class="btn-secondary" id="apiSettingsCancelBtn" style="flex:1;text-align:center;">取消</button>
     </div>
   </div>
 </div>
@@ -743,18 +788,14 @@
     const modal = $('#authModal')
     modal.classList.add('show')
     $('#authError').classList.remove('show'); $('#authError').textContent = ''
-    $('#authEmail').value = ''
-    $('#authStepEmail').style.display = ''
-    $('#authStepCode').style.display = 'none'
-    $('#authEmail').focus()
+    resetAuthViews()
+    $('#loginEmail').focus()
   }
 
-  function showCodeStep(email) {
-    $('#authStepEmail').style.display = 'none'
-    $('#authStepCode').style.display = ''
-    $('#authCodeEmail').textContent = email
-    $('#authCode').value = ''
-    $('#authCode').focus()
+  function resetAuthViews() {
+    $('#authStepLogin').style.display = ''
+    $('#authStepRegEmail').style.display = 'none'
+    $('#authStepRegCode').style.display = 'none'
   }
 
   function hideAuthModal() { $('#authModal').classList.remove('show') }
@@ -771,18 +812,62 @@
     }
   }
 
-  // ── Auth 模态框 ──
-  let authEmail = ''
+  function showAuthError(msg) {
+    const errEl = $('#authError')
+    errEl.textContent = msg; errEl.classList.add('show')
+  }
 
+  // ── 登录 ──
   $('#loginBtn').addEventListener('click', () => showAuthModal())
 
-  // 获取验证码
-  $('#authSendCodeBtn').addEventListener('click', async () => {
-    const email = $('#authEmail').value.trim()
-    const errEl = $('#authError')
-    if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; errEl.classList.add('show'); return }
+  $('#loginBtn2').addEventListener('click', async () => {
+    const email = $('#loginEmail').value.trim()
+    const password = $('#loginPassword').value.trim()
+    if (!email || !email.includes('@')) { showAuthError('请输入有效的邮箱地址'); return }
+    if (!password) { showAuthError('请输入密码'); return }
 
-    const btn = $('#authSendCodeBtn'); const btnText = $('#authSendCodeText')
+    const btn = $('#loginBtn2'); const btnText = $('#loginBtnText')
+    btn.disabled = true; btnText.textContent = '登录中…'
+
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      const d = await r.json()
+      if (!r.ok) { showAuthError(d.detail || '登录失败'); btn.disabled = false; btnText.textContent = '登录'; return }
+      saveAuth(d.token, d.username)
+      hideAuthModal()
+      showToast(d.msg)
+    } catch (e) {
+      showAuthError('网络错误: ' + e.message)
+    }
+    btn.disabled = false; btnText.textContent = '登录'
+  })
+
+  $('#loginEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginPassword').focus() })
+  $('#loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginBtn2').click() })
+
+  // ── 切换登录/注册 ──
+  let regEmail = ''
+  $('#switchToRegister').addEventListener('click', () => {
+    $('#authStepLogin').style.display = 'none'
+    $('#authStepRegEmail').style.display = ''
+    $('#authStepRegCode').style.display = 'none'
+    $('#regEmail').focus()
+  })
+  document.querySelectorAll('#switchToLogin, #switchToLogin2').forEach(el => el.addEventListener('click', () => {
+    resetAuthViews()
+    $('#loginEmail').focus()
+  }))
+
+  // ── 注册：获取验证码 ──
+  $('#regSendCodeBtn').addEventListener('click', async () => {
+    const email = $('#regEmail').value.trim()
+    if (!email || !email.includes('@')) { showAuthError('请输入有效的邮箱地址'); return }
+
+    const btn = $('#regSendCodeBtn'); const btnText = $('#regSendCodeText')
     btn.disabled = true; btnText.textContent = '发送中…'
 
     try {
@@ -793,12 +878,18 @@
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.detail || '发送失败')
-      authEmail = email
-      showCodeStep(email)
+      regEmail = email
+      // 切换到验证码步骤
+      $('#authStepRegEmail').style.display = 'none'
+      $('#authStepRegCode').style.display = ''
+      $('#regCodeEmail').textContent = email
+      $('#regCode').value = ''
+      $('#regPassword').value = ''
+      $('#regCode').focus()
       // 60 秒倒计时
       let sec = 60
-      const cd = $('#authCountdown')
-      const rs = $('#authResendCode')
+      const cd = $('#regCountdown')
+      const rs = $('#regResendCode')
       rs.style.pointerEvents = 'none'; rs.style.color = 'var(--dim)'
       const iv = setInterval(() => {
         sec--
@@ -806,50 +897,47 @@
         cd.textContent = `(${sec}s)`
       }, 1000)
     } catch (e) {
-      errEl.textContent = e.message; errEl.classList.add('show')
+      showAuthError(e.message)
     }
     btn.disabled = false; btnText.textContent = '获取验证码'
   })
 
-  // 登录/注册
-  $('#authLoginBtn').addEventListener('click', async () => {
-    const code = $('#authCode').value.trim()
-    const errEl = $('#authError')
-    if (!code || code.length !== 6) { errEl.textContent = '请输入 6 位验证码'; errEl.classList.add('show'); return }
+  $('#regEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#regSendCodeBtn').click() })
 
-    const btn = $('#authLoginBtn'); const btnText = $('#authLoginText')
-    btn.disabled = true; btnText.textContent = '验证中…'
+  // ── 注册：提交 ──
+  $('#regSubmitBtn').addEventListener('click', async () => {
+    const code = $('#regCode').value.trim()
+    const password = $('#regPassword').value.trim()
+    if (!code || code.length !== 6) { showAuthError('请输入 6 位验证码'); return }
+    if (password.length < 6) { showAuthError('密码至少 6 位'); return }
+
+    const btn = $('#regSubmitBtn'); const btnText = $('#regSubmitText')
+    btn.disabled = true; btnText.textContent = '注册中…'
 
     try {
-      const r = await fetch('/api/auth/login', {
+      const r = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, code })
+        body: JSON.stringify({ email: regEmail, code, password })
       })
       const d = await r.json()
-      if (!r.ok) { errEl.textContent = d.detail || '登录失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = '登录'; return }
-
+      if (!r.ok) { showAuthError(d.detail || '注册失败'); btn.disabled = false; btnText.textContent = '注册'; return }
       saveAuth(d.token, d.username)
-      currentUser = d.username
       hideAuthModal()
-      showToast(d.msg)
+      showToast('注册成功')
     } catch (e) {
-      errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show')
+      showAuthError('网络错误: ' + e.message)
     }
-    btn.disabled = false; btnText.textContent = '登录'
+    btn.disabled = false; btnText.textContent = '注册'
   })
 
-  // 回车 → 提交
-  $('#authEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authSendCodeBtn').click() })
-  $('#authCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authLoginBtn').click() })
-  // 自动识别 6 位码
-  $('#authCode').addEventListener('input', (e) => { if (e.target.value.length === 6) $('#authLoginBtn').click() })
+  $('#regCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#regPassword').focus() })
+  $('#regPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#regSubmitBtn').click() })
 
-  // 更换邮箱 / 重新发送
-  $('#authChangeEmail').addEventListener('click', () => showAuthModal())
-  $('#authResendCode').addEventListener('click', () => {
-    if (!authEmail) return
-    $('#authSendCodeBtn').click()
+  // 重新发送
+  $('#regResendCode').addEventListener('click', () => {
+    if (!regEmail) return
+    $('#regSendCodeBtn').click()
   })
 
   $('#authModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) hideAuthModal() })
@@ -863,8 +951,41 @@
     showToast('已退出登录')
   })
 
+  // ── API 设置 ──
+  $('#apiSettingsBtn').addEventListener('click', () => {
+    $('#userMenu').classList.remove('show')
+    $('#apiSettingsError').classList.remove('show')
+    $('#apiKeyInput').value = ''
+    $('#apiSettingsModal').classList.add('show')
+    $('#apiKeyInput').focus()
+  })
+  $('#apiSettingsCancelBtn').addEventListener('click', () => $('#apiSettingsModal').classList.remove('show'))
+  $('#apiSettingsModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) $('#apiSettingsModal').classList.remove('show') })
+  $('#apiSettingsSaveBtn').addEventListener('click', async () => {
+    const key = $('#apiKeyInput').value.trim()
+    const errEl = $('#apiSettingsError')
+    if (!key) { errEl.textContent = '请输入 API Key'; errEl.classList.add('show'); return }
+    const btn = $('#apiSettingsSaveBtn'); const btnText = $('#apiSettingsSaveText')
+    btn.disabled = true; btnText.textContent = '保存中…'
+    try {
+      const r = await authFetch('/api/auth/settings', {
+        method: 'POST',
+        body: JSON.stringify({ gpt_api_key: key })
+      })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.detail || '保存失败')
+      $('#apiSettingsModal').classList.remove('show')
+      showToast('API Key 已保存')
+    } catch (e) {
+      errEl.textContent = e.message; errEl.classList.add('show')
+    }
+    btn.disabled = false; btnText.textContent = '保存'
+  })
+
   // ── 生成 ──
   genBtn.addEventListener('click', async () => {
+    if (!authToken) { showAuthModal(); return }
+
     const prompt = promptEl.value.trim()
     if (!prompt) { showToast('请输入提示词'); promptEl.focus(); return }
 
@@ -876,9 +997,8 @@
     setStatus('pending', '正在提交任务…', 'fa-circle-notch fa-spin')
 
     try {
-      const r1 = await fetch('/api/gpt/generate', {
+      const r1 = await authFetch('/api/gpt/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, size: sizeEl.value, urls })
       })
       const d1 = await r1.json()
@@ -893,7 +1013,7 @@
 
       const poll = async () => {
         try {
-          const r2 = await fetch('/api/gpt/result/' + encodeURIComponent(taskId))
+          const r2 = await authFetch('/api/gpt/result/' + encodeURIComponent(taskId))
           const d2 = await r2.json()
 
           if (d2.code === 1 && d2.data) {
