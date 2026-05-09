@@ -67,7 +67,10 @@ def _send_email(to: str, subject: str, html: str):
     )
 
     if resp.status_code not in (200, 201):
-        detail = resp.json().get("message", resp.text)
+        try:
+            detail = resp.json().get("message", resp.text)
+        except Exception:
+            detail = resp.text[:200]
         raise HTTPException(500, f"邮件发送失败: {detail}")
 
 # 验证码缓存 { email: { code, expire_at } }
@@ -333,11 +336,10 @@ async def send_code(body: dict):
             "expire_at": now + CODE_EXPIRE_SECONDS,
         }
         return JSONResponse({"msg": "验证码已发送", "email": email})
+    except HTTPException:
+        raise
     except Exception as e:
-        # _send_email 应已处理，兜底
         raise HTTPException(500, f"邮件发送失败: {e}")
-    except Exception as e:
-        raise HTTPException(500, f"发送失败: {e}")
 
 
 @app.post("/api/auth/register")
