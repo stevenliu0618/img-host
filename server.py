@@ -40,6 +40,31 @@ JWT_SECRET = os.environ.get("JWT_SECRET", "deepnovis-jwt-secret-change-me")
 JWT_ALGO = "HS256"
 JWT_EXPIRE_HOURS = 72
 BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def _hash_password(password: str) -> str:
+    """
+    bcrypt 有 72 字节限制，先 SHA-256 再 hash，支持任意长度密码。
+    """
+    digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
+    return BCRYPT.hash(digest)
+
+
+def _verify_password(password: str, hashed: str) -> bool:
+    """
+    验证密码：先试 SHA-256 预处理（新方式），
+    失败后试原始密码（兼容旧数据）。
+    """
+    try:
+        digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
+        return BCRYPT.verify(digest, hashed)
+    except Exception:
+        pass
+    try:
+        return BCRYPT.verify(password, hashed)
+    except Exception:
+        return False
+
 USERS_FILE = DATA_DIR / "users.json"
 
 # ── Resend 邮件配置 ──────────────────────────────────────────────────────

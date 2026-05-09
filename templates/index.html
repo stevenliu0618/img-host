@@ -464,24 +464,6 @@
   </div>
 </div>
 
-<!-- API 设置弹窗 -->
-<div class="modal-overlay" id="apiSettingsModal">
-  <div class="modal-box">
-    <h2>API 设置</h2>
-    <div class="modal-sub">配置速创 API Key，Key 仅保存在服务端</div>
-    <div class="auth-error" id="apiSettingsError"></div>
-    <div class="form-group">
-      <input type="password" id="apiKeyInput" placeholder="输入速创 API Key" />
-    </div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn-upload" id="apiSettingsSaveBtn" style="flex:2;justify-content:center;border-radius:12px;">
-        <span id="apiSettingsSaveText">保存</span>
-      </button>
-      <button class="btn-upload" id="apiSettingsCancelBtn" style="flex:1;justify-content:center;border-radius:12px;background:#e0e0e5;color:var(--text);">取消</button>
-    </div>
-  </div>
-</div>
-
 <!-- Toast -->
 <div id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:rgba(29,29,31,0.92);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transition:all 0.3s ease;pointer-events:none;backdrop-filter:blur(8px);z-index:999;"></div>
 
@@ -505,6 +487,24 @@
     <div class="modal-actions">
       <button class="btn-sm btn-ghost" onclick="closeModal()">关闭</button>
       <button class="btn-sm btn-primary" onclick="copyModalUrl()"><i class="fa-solid fa-copy"></i> 复制</button>
+    </div>
+  </div>
+</div>
+
+<!-- API 设置弹窗 -->
+<div class="modal-overlay" id="apiSettingsModal">
+  <div class="modal-box">
+    <h2>API 设置</h2>
+    <div class="modal-sub">配置你的 API Key，仅保存在服务端</div>
+    <div class="auth-error" id="apiSettingsError"></div>
+    <div class="form-group">
+      <input type="password" id="apiKeyInput" placeholder="输入 API Key" />
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn-upload" id="apiSettingsSaveBtn" style="flex:2;justify-content:center;border-radius:12px;">
+        <span id="apiSettingsSaveText">保存</span>
+      </button>
+      <button class="btn-upload" id="apiSettingsCancelBtn" style="flex:1;justify-content:center;border-radius:12px;background:#e0e0e5;color:var(--text);">取消</button>
     </div>
   </div>
 </div>
@@ -546,6 +546,8 @@ async function copyText(text) {
   }
 }
 
+function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML }
+
 // ── 格式切换 ─────────────────────────────────────────────────────────────
 document.getElementById('format-tabs').addEventListener('click', e => {
   const btn = e.target.closest('.fmt-tab');
@@ -580,30 +582,35 @@ function createProgItem(file) {
   const item = document.createElement('div');
   item.className = 'prog-item';
   item.innerHTML = `
-    <div class="prog-thumb" id="thumb-${file.name}">
+    <div class="prog-thumb prog-thumb-${Date.now()}">
       <i class="fa-regular fa-image"></i>
     </div>
     <div class="prog-info">
-      <div class="prog-name">${file.name}</div>
-      <div class="prog-bar-wrap"><div class="prog-bar shimmer" id="bar-${file.name}" style="width:5%"></div></div>
-      <div class="prog-status" id="status-${file.name}">准备上传…</div>
+      <div class="prog-name">${escHtml(file.name)}</div>
+      <div class="prog-bar-wrap"><div class="prog-bar shimmer" style="width:5%"></div></div>
+      <div class="prog-status">准备上传…</div>
     </div>
-    <div class="prog-action" id="action-${file.name}"></div>
+    <div class="prog-action"></div>
   `;
   document.getElementById('progress-area').prepend(item);
+  const thumbEl = item.querySelector('.prog-thumb');
+  const barEl = item.querySelector('.prog-bar');
+  const statusEl = item.querySelector('.prog-status');
+  const actionEl = item.querySelector('.prog-action');
+  // 挂载到 DOM 上方便后续引用
+  item._bar = barEl; item._status = statusEl; item._action = actionEl;
   reader.onload = e => {
-    const thumb = document.getElementById(`thumb-${file.name}`);
-    if (thumb) thumb.innerHTML = `<img src="${e.target.result}"/>`;
+    if (thumbEl) thumbEl.innerHTML = `<img src="${e.target.result}"/>`;
   };
   reader.readAsDataURL(file);
   return item;
 }
 
 async function uploadFile(file) {
-  createProgItem(file);
-  const bar    = document.getElementById(`bar-${file.name}`);
-  const status = document.getElementById(`status-${file.name}`);
-  const action = document.getElementById(`action-${file.name}`);
+  const item = createProgItem(file);
+  const bar = item._bar;
+  const status = item._status;
+  const action = item._action;
 
   // 模拟进度
   let pct = 5;
@@ -856,5 +863,10 @@ document.getElementById('apiSettingsSaveBtn')?.addEventListener('click', async (
 loadImages();
 renderAuthUI();
 </script>
+<!-- ── 版本号 ── -->
+<div style="text-align:center;padding:20px 0 32px;font-size:12px;color:var(--sub);">
+  v1.0.0
+</div>
+
 </body>
 </html>

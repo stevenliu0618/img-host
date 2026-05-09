@@ -386,7 +386,6 @@
     </div>
   </nav>
   <div style="display:flex;gap:12px;align-items:center;position:relative;">
-    <span class="badge">GPT-Image-2 · 0.1元/张</span>
     <div id="authArea">
       <button class="btn-sm btn-sm-blue" id="loginBtn" style="display:none;"><i class="fa-regular fa-circle-user"></i> 登录</button>
       <div id="userArea" style="display:none;position:relative;">
@@ -409,8 +408,8 @@
 
 <div class="container">
 
-  <div class="page-title">GPT-Image-2</div>
-  <div class="page-sub">基于速创 API 的 AI 生图工具</div>
+  <div class="page-title">AI 绘图</div>
+  <div class="page-sub">输入提示词，AI 帮你生成图片</div>
 
   <!-- 生图区 -->
   <div class="card">
@@ -486,18 +485,6 @@
     </div>
   </div>
 
-  <!-- 配置状态 -->
-  <div class="card">
-    <div class="card-title"><i class="fa-solid fa-sliders" style="margin-right:4px;"></i>配置</div>
-    <div class="key-status" style="padding:4px 0;">
-      <div>
-        <div class="key-label">API Key</div>
-        <div class="key-hint" id="keyHintText">在用户菜单 → API 设置中配置</div>
-      </div>
-      <span class="key-indicator" id="keyIndicator">检测中…</span>
-    </div>
-  </div>
-
   <!-- 历史记录 -->
   <div class="card">
     <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
@@ -514,39 +501,64 @@
 <!-- Auth Modal -->
 <div class="modal-overlay" id="authModal">
   <div class="modal-box">
-    <h2 id="authModalTitle">登录 DeepNovis</h2>
-    <div class="modal-sub" id="authModalSub">输入邮箱获取验证码，新用户自动注册</div>
+    <h2 id="authModalTitle">登录</h2>
+    <div class="modal-sub" id="authModalSub">首次使用请先注册</div>
     <div class="auth-error" id="authError"></div>
 
-    <!-- 步骤 1：输入邮箱 -->
-    <div id="authStepEmail">
+    <!-- 步骤 1：登录（默认） -->
+    <div id="authStepLogin">
       <div class="form-group">
         <label class="form-label">邮箱地址</label>
-        <input type="email" id="authEmail" placeholder="your@email.com" autocomplete="email" />
+        <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email" />
       </div>
-      <button class="btn btn-primary" id="authSendCodeBtn">
-        <span id="authSendCodeText">获取验证码</span>
+      <div class="form-group">
+        <label class="form-label">密码</label>
+        <input type="password" id="loginPassword" placeholder="输入密码" autocomplete="current-password" />
+      </div>
+      <button class="btn btn-primary" id="loginBtn2">
+        <span id="loginBtnText">登录</span>
       </button>
+      <div class="auth-switch">
+        <a id="switchToRegister" style="cursor:pointer;">没有账号？去注册</a>
+      </div>
     </div>
 
-    <!-- 步骤 2：输入验证码 -->
-    <div id="authStepCode" style="display:none;">
+    <!-- 步骤 2：注册 - 输入邮箱 -->
+    <div id="authStepRegEmail" style="display:none;">
+      <div class="form-group">
+        <label class="form-label">邮箱地址</label>
+        <input type="email" id="regEmail" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <button class="btn btn-primary" id="regSendCodeBtn">
+        <span id="regSendCodeText">获取验证码</span>
+      </button>
+      <div class="auth-switch">
+        <a id="switchToLogin" style="cursor:pointer;">已有账号？去登录</a>
+      </div>
+    </div>
+
+    <!-- 步骤 3：注册 - 验证码 + 设置密码 -->
+    <div id="authStepRegCode" style="display:none;">
       <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
-        验证码已发送至 <strong id="authCodeEmail" style="color:var(--text);"></strong>
+        验证码已发送至 <strong id="regCodeEmail" style="color:var(--text);"></strong>
       </div>
       <div class="form-group">
         <label class="form-label">验证码</label>
-        <input type="text" id="authCode" placeholder="输入 6 位验证码" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+        <input type="text" id="regCode" placeholder="输入 6 位验证码" maxlength="6" inputmode="numeric"
           style="font-size:24px;letter-spacing:8px;text-align:center;font-weight:600;" />
       </div>
-      <button class="btn btn-primary" id="authLoginBtn">
-        <span id="authLoginText">登录</span>
+      <div class="form-group">
+        <label class="form-label">设置密码</label>
+        <input type="password" id="regPassword" placeholder="至少 6 位" autocomplete="new-password" />
+      </div>
+      <button class="btn btn-primary" id="regSubmitBtn">
+        <span id="regSubmitText">注册</span>
       </button>
       <div class="auth-switch">
-        <a id="authChangeEmail">更换邮箱</a>
+        <a id="switchToLogin2" style="cursor:pointer;">已有账号？去登录</a>
         <span style="margin:0 8px;color:var(--border);">·</span>
-        <a id="authResendCode">重新发送</a>
-        <span id="authCountdown" style="color:var(--dim);font-size:12px;"></span>
+        <a id="regResendCode" style="cursor:pointer;">重新发送</a>
+        <span id="regCountdown" style="color:var(--dim);font-size:12px;"></span>
       </div>
     </div>
   </div>
@@ -556,12 +568,10 @@
 <div class="modal-overlay" id="apiSettingsModal">
   <div class="modal-box">
     <h2>API 设置</h2>
-    <div class="modal-sub">配置速创 API Key，Key 仅保存在服务端，安全隔离</div>
+    <div class="modal-sub">配置你的 API Key，仅保存在服务端</div>
     <div class="auth-error" id="apiSettingsError"></div>
     <div class="form-group">
-      <label class="form-label">速创 API Key</label>
-      <input type="password" id="apiKeyInput" placeholder="输入你的 API Key" />
-      <div style="font-size:12px;color:var(--dim);margin-top:6px;">Key 不会返回给前端，仅用于生图请求</div>
+      <input type="password" id="apiKeyInput" placeholder="输入 API Key" />
     </div>
     <div class="form-row" style="gap:10px;">
       <button class="btn btn-primary" id="apiSettingsSaveBtn" style="flex:2;">
@@ -597,7 +607,6 @@
   const clearHistoryBtn = $('#clearHistoryBtn')
   
   const toast = $('#toast')
-  const keyIndicator = $('#keyIndicator')
   // ── 状态 ──
   let polling = false
   let pollTimer = null
@@ -656,7 +665,7 @@
   function showResult(url) {
     currentResult = url; resultArea.classList.add('show')
     resultImg.src = url; resultUrl.textContent = url
-    hideStatus(); genBtn.disabled = false; genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 生成图片'
+    hideStatus(); genBtn.disabled = false; genBtnText.textContent = '生成图片'
   }
   function hideResult() { resultArea.classList.remove('show'); currentResult = null }
 
@@ -779,18 +788,14 @@
     const modal = $('#authModal')
     modal.classList.add('show')
     $('#authError').classList.remove('show'); $('#authError').textContent = ''
-    $('#authEmail').value = ''
-    $('#authStepEmail').style.display = ''
-    $('#authStepCode').style.display = 'none'
-    $('#authEmail').focus()
+    resetAuthViews()
+    $('#loginEmail').focus()
   }
 
-  function showCodeStep(email) {
-    $('#authStepEmail').style.display = 'none'
-    $('#authStepCode').style.display = ''
-    $('#authCodeEmail').textContent = email
-    $('#authCode').value = ''
-    $('#authCode').focus()
+  function resetAuthViews() {
+    $('#authStepLogin').style.display = ''
+    $('#authStepRegEmail').style.display = 'none'
+    $('#authStepRegCode').style.display = 'none'
   }
 
   function hideAuthModal() { $('#authModal').classList.remove('show') }
@@ -807,18 +812,62 @@
     }
   }
 
-  // ── Auth 模态框 ──
-  let authEmail = ''
+  function showAuthError(msg) {
+    const errEl = $('#authError')
+    errEl.textContent = msg; errEl.classList.add('show')
+  }
 
+  // ── 登录 ──
   $('#loginBtn').addEventListener('click', () => showAuthModal())
 
-  // 获取验证码
-  $('#authSendCodeBtn').addEventListener('click', async () => {
-    const email = $('#authEmail').value.trim()
-    const errEl = $('#authError')
-    if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; errEl.classList.add('show'); return }
+  $('#loginBtn2').addEventListener('click', async () => {
+    const email = $('#loginEmail').value.trim()
+    const password = $('#loginPassword').value.trim()
+    if (!email || !email.includes('@')) { showAuthError('请输入有效的邮箱地址'); return }
+    if (!password) { showAuthError('请输入密码'); return }
 
-    const btn = $('#authSendCodeBtn'); const btnText = $('#authSendCodeText')
+    const btn = $('#loginBtn2'); const btnText = $('#loginBtnText')
+    btn.disabled = true; btnText.textContent = '登录中…'
+
+    try {
+      const r = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      })
+      const d = await r.json()
+      if (!r.ok) { showAuthError(d.detail || '登录失败'); btn.disabled = false; btnText.textContent = '登录'; return }
+      saveAuth(d.token, d.username)
+      hideAuthModal()
+      showToast(d.msg)
+    } catch (e) {
+      showAuthError('网络错误: ' + e.message)
+    }
+    btn.disabled = false; btnText.textContent = '登录'
+  })
+
+  $('#loginEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginPassword').focus() })
+  $('#loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#loginBtn2').click() })
+
+  // ── 切换登录/注册 ──
+  let regEmail = ''
+  $('#switchToRegister').addEventListener('click', () => {
+    $('#authStepLogin').style.display = 'none'
+    $('#authStepRegEmail').style.display = ''
+    $('#authStepRegCode').style.display = 'none'
+    $('#regEmail').focus()
+  })
+  document.querySelectorAll('#switchToLogin, #switchToLogin2').forEach(el => el.addEventListener('click', () => {
+    resetAuthViews()
+    $('#loginEmail').focus()
+  }))
+
+  // ── 注册：获取验证码 ──
+  $('#regSendCodeBtn').addEventListener('click', async () => {
+    const email = $('#regEmail').value.trim()
+    if (!email || !email.includes('@')) { showAuthError('请输入有效的邮箱地址'); return }
+
+    const btn = $('#regSendCodeBtn'); const btnText = $('#regSendCodeText')
     btn.disabled = true; btnText.textContent = '发送中…'
 
     try {
@@ -829,12 +878,18 @@
       })
       const d = await r.json()
       if (!r.ok) throw new Error(d.detail || '发送失败')
-      authEmail = email
-      showCodeStep(email)
+      regEmail = email
+      // 切换到验证码步骤
+      $('#authStepRegEmail').style.display = 'none'
+      $('#authStepRegCode').style.display = ''
+      $('#regCodeEmail').textContent = email
+      $('#regCode').value = ''
+      $('#regPassword').value = ''
+      $('#regCode').focus()
       // 60 秒倒计时
       let sec = 60
-      const cd = $('#authCountdown')
-      const rs = $('#authResendCode')
+      const cd = $('#regCountdown')
+      const rs = $('#regResendCode')
       rs.style.pointerEvents = 'none'; rs.style.color = 'var(--dim)'
       const iv = setInterval(() => {
         sec--
@@ -842,51 +897,47 @@
         cd.textContent = `(${sec}s)`
       }, 1000)
     } catch (e) {
-      errEl.textContent = e.message; errEl.classList.add('show')
+      showAuthError(e.message)
     }
     btn.disabled = false; btnText.textContent = '获取验证码'
   })
 
-  // 登录/注册
-  $('#authLoginBtn').addEventListener('click', async () => {
-    const code = $('#authCode').value.trim()
-    const errEl = $('#authError')
-    if (!code || code.length !== 6) { errEl.textContent = '请输入 6 位验证码'; errEl.classList.add('show'); return }
+  $('#regEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#regSendCodeBtn').click() })
 
-    const btn = $('#authLoginBtn'); const btnText = $('#authLoginText')
-    btn.disabled = true; btnText.textContent = '验证中…'
+  // ── 注册：提交 ──
+  $('#regSubmitBtn').addEventListener('click', async () => {
+    const code = $('#regCode').value.trim()
+    const password = $('#regPassword').value.trim()
+    if (!code || code.length !== 6) { showAuthError('请输入 6 位验证码'); return }
+    if (password.length < 6) { showAuthError('密码至少 6 位'); return }
+
+    const btn = $('#regSubmitBtn'); const btnText = $('#regSubmitText')
+    btn.disabled = true; btnText.textContent = '注册中…'
 
     try {
-      const r = await fetch('/api/auth/login', {
+      const r = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: authEmail, code })
+        body: JSON.stringify({ email: regEmail, code, password })
       })
       const d = await r.json()
-      if (!r.ok) { errEl.textContent = d.detail || '登录失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = '登录'; return }
-
+      if (!r.ok) { showAuthError(d.detail || '注册失败'); btn.disabled = false; btnText.textContent = '注册'; return }
       saveAuth(d.token, d.username)
-      currentUser = d.username
       hideAuthModal()
-      showToast(d.msg)
-      fetchKeyStatus()
+      showToast('注册成功')
     } catch (e) {
-      errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show')
+      showAuthError('网络错误: ' + e.message)
     }
-    btn.disabled = false; btnText.textContent = '登录'
+    btn.disabled = false; btnText.textContent = '注册'
   })
 
-  // 回车 → 提交
-  $('#authEmail').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authSendCodeBtn').click() })
-  $('#authCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authLoginBtn').click() })
-  // 自动识别 6 位码
-  $('#authCode').addEventListener('input', (e) => { if (e.target.value.length === 6) $('#authLoginBtn').click() })
+  $('#regCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#regPassword').focus() })
+  $('#regPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#regSubmitBtn').click() })
 
-  // 更换邮箱 / 重新发送
-  $('#authChangeEmail').addEventListener('click', () => showAuthModal())
-  $('#authResendCode').addEventListener('click', () => {
-    if (!authEmail) return
-    $('#authSendCodeBtn').click()
+  // 重新发送
+  $('#regResendCode').addEventListener('click', () => {
+    if (!regEmail) return
+    $('#regSendCodeBtn').click()
   })
 
   $('#authModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) hideAuthModal() })
@@ -898,10 +949,9 @@
     saveAuth(null, '')
     $('#userMenu').classList.remove('show')
     showToast('已退出登录')
-    keyIndicator.textContent = '请先登录'; keyIndicator.style.color = 'var(--orange)'
   })
 
-  // ── API 设置弹窗 ──
+  // ── API 设置 ──
   $('#apiSettingsBtn').addEventListener('click', () => {
     $('#userMenu').classList.remove('show')
     $('#apiSettingsError').classList.remove('show')
@@ -911,16 +961,12 @@
   })
   $('#apiSettingsCancelBtn').addEventListener('click', () => $('#apiSettingsModal').classList.remove('show'))
   $('#apiSettingsModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) $('#apiSettingsModal').classList.remove('show') })
-
   $('#apiSettingsSaveBtn').addEventListener('click', async () => {
     const key = $('#apiKeyInput').value.trim()
     const errEl = $('#apiSettingsError')
     if (!key) { errEl.textContent = '请输入 API Key'; errEl.classList.add('show'); return }
-    if (key.length < 8) { errEl.textContent = 'API Key 格式不正确'; errEl.classList.add('show'); return }
-
     const btn = $('#apiSettingsSaveBtn'); const btnText = $('#apiSettingsSaveText')
     btn.disabled = true; btnText.textContent = '保存中…'
-
     try {
       const r = await authFetch('/api/auth/settings', {
         method: 'POST',
@@ -930,31 +976,15 @@
       if (!r.ok) throw new Error(d.detail || '保存失败')
       $('#apiSettingsModal').classList.remove('show')
       showToast('API Key 已保存')
-      fetchKeyStatus()
     } catch (e) {
       errEl.textContent = e.message; errEl.classList.add('show')
     }
     btn.disabled = false; btnText.textContent = '保存'
   })
 
-  // ── 检查 API Key 状态 ──
-  async function fetchKeyStatus() {
-    if (!authToken) { keyIndicator.textContent = '请先登录'; keyIndicator.style.color = 'var(--orange)'; return }
-    try {
-      const r = await authFetch('/api/gpt/status'); const d = await r.json()
-      if (d.ready) {
-        keyIndicator.textContent = '✓ 已配置'; keyIndicator.style.color = 'var(--green)'
-      } else {
-        keyIndicator.textContent = '未配置，请设置'; keyIndicator.style.color = 'var(--orange)'
-      }
-    } catch {
-      keyIndicator.textContent = '无法连接'; keyIndicator.style.color = 'var(--red)'
-    }
-  }
-
   // ── 生成 ──
   genBtn.addEventListener('click', async () => {
-    if (!authToken) { showAuthModal('login'); return }
+    if (!authToken) { showAuthModal(); return }
 
     const prompt = promptEl.value.trim()
     if (!prompt) { showToast('请输入提示词'); promptEl.focus(); return }
@@ -1001,7 +1031,7 @@
         } catch (e) {
           setStatus('error', '查询出错: ' + e.message, 'fa-circle-exclamation')
           genBtn.disabled = false
-          genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 重新生成'
+          genBtnText.innerHTML = '重新生成'
           polling = false
         }
       }
@@ -1010,7 +1040,7 @@
     } catch (e) {
       setStatus('error', e.message, 'fa-circle-exclamation')
       genBtn.disabled = false
-      genBtnText.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> 重新生成'
+      genBtnText.textContent = '重新生成'
     }
   })
 
@@ -1025,8 +1055,13 @@
   // ── 初始化 ──
   renderAuthUI()
   renderHistory()
-  fetchKeyStatus()
 })()
 </script>
+
+<!-- ── 版本号 ── -->
+<div style="text-align:center;padding:20px 0 32px;font-size:12px;color:#6e6e73;">
+  v1.0.0
+</div>
+
 </body>
 </html>
