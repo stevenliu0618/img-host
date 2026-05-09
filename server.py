@@ -45,9 +45,6 @@ USERS_FILE = DATA_DIR / "users.json"
 # ── Resend 邮件配置 ──────────────────────────────────────────────────────
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
-# ── GPT-Image-2 服务端 API Key ──────────────────────────────────────────
-GPTIMAGE_API_KEY = os.environ.get("GPTIMAGE_API_KEY", "")
-
 
 def _send_email(to: str, subject: str, html: str):
     """通过 Resend API 发送邮件。"""
@@ -343,16 +340,19 @@ async def send_code(body: dict):
         raise HTTPException(500, f"发送失败: {e}")
 
 
-@app.post("/api/auth/login")
-async def auth_login(body: dict):
-    """邮箱 + 验证码登录/注册。新用户自动注册。"""
+@app.post("/api/auth/register")
+async def auth_register(body: dict):
+    """邮箱 + 验证码 + 密码 → 注册新用户。"""
     email = (body.get("email") or "").strip().lower()
     code = (body.get("code") or "").strip()
+    password = (body.get("password") or "").strip()
 
     if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
         raise HTTPException(400, "请输入有效的邮箱地址")
     if not code or len(code) != 6 or not code.isdigit():
         raise HTTPException(400, "请输入 6 位验证码")
+    if len(password) < 6:
+        raise HTTPException(400, "密码至少 6 位字符")
 
     # 校验验证码
     cached = verify_codes.get(email)
@@ -367,31 +367,58 @@ async def auth_login(body: dict):
     # 验证码正确后清除
     verify_codes.pop(email, None)
 
-    # 用户不存在则自动注册
     users = _load_users()
-    if email not in users:
-        # 从邮箱前缀取用户名
-        username = email.split("@")[0]
-        users[email] = {
-            "password": "",  # 邮箱验证不需要密码
-            "email": email,
-            "username": username,
-            "created_at": datetime.now().isoformat(),
-            "gpt_api_key": "",
-        }
-        _save_users(users)
-        is_new = True
-    else:
-        is_new = False
-        username = users[email].get("username", email.split("@")[0])
+    if email in users:
+        raise HTTPException(400, "该邮箱已注册，请直接登录")
+
+    username = email.split("@")[0]
+    users[email] = {
+        "password": BCRYPT.hash(password),
+        "email": email,
+        "username": username,
+        "created_at": datetime.now().isoformat(),
+        "gpt_api_key": "",
+    }
+    _save_users(users)
 
     token = create_token(email)
     return JSONResponse({
         "token": token,
         "username": username,
         "email": email,
-        "msg": "登录成功" if not is_new else "注册成功",
-        "is_new": is_new,
+        "msg": "注册成功",
+    })
+
+
+@app.post("/api/auth/login")
+async def auth_login(body: dict):
+    """邮箱 + 密码 → 登录，返回 JWT。"""
+    email = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+
+    if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        raise HTTPException(400, "请输入有效的邮箱地址")
+    if not password:
+        raise HTTPException(400, "请输入密码")
+
+    users = _load_users()
+    user = users.get(email)
+    if not user:
+        raise HTTPException(400, "该邮箱未注册，请先注册")
+
+    if not user.get("password"):
+        raise HTTPException(400, "该账号无密码，请使用注册流程设置密码")
+
+    if not BCRYPT.verify(password, user["password"]):
+        raise HTTPException(400, "密码错误")
+
+    token = create_token(email)
+    username = user.get("username", email.split("@")[0])
+    return JSONResponse({
+        "token": token,
+        "username": username,
+        "email": email,
+        "msg": "登录成功",
     })
 
 
@@ -432,22 +459,23 @@ async def update_settings(body: dict, payload: dict = Depends(verify_token)):
 # ── GPT-Image-2 代理 API ──────────────────────────────────────────────────
 
 @app.get("/api/gpt/status")
-async def gpt_status():
-    """查询服务端 API Key 配置状态。"""
+async def gpt_status(payload: dict = Depends(verify_token)):
+    """查询当前用户 API Key 配置状态。"""
+    users = _load_users()
+    user = users.get(payload["sub"], {})
     return JSONResponse({
-        "ready": bool(GPTIMAGE_API_KEY),
+        "ready": bool(user.get("gpt_api_key", "")),
     })
 
 
 @app.post("/api/gpt/generate")
-async def gpt_generate(body: dict):
+async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     """提交生图任务到 API。"""
-    if not GPTIMAGE_API_KEY:
-        raise HTTPException(400, "服务端未配置 API Key，请联系管理员")
-
-    prompt = body.get("prompt", "").strip()
-    if not prompt:
-        raise HTTPException(400, "请输入提示词")
+    users = _load_users()
+    user = users.get(payload["sub"], {})
+    api_key = user.get("gpt_api_key", "")
+    if not api_key:
+        raise HTTPException(400, "请先配置 API Key")
 
     payload = {
         "prompt": prompt,
@@ -457,9 +485,9 @@ async def gpt_generate(body: dict):
     if isinstance(urls, list) and len(urls):
         payload["urls"] = urls
 
-    url = f"https://api.wuyinkeji.com/api/async/image_gpt?key={GPTIMAGE_API_KEY}"
+    url = f"https://api.wuyinkeji.com/api/async/image_gpt?key={api_key}"
     headers = {
-        "Authorization": GPTIMAGE_API_KEY,
+        "Authorization": api_key,
         "Content-Type": "application/json",
     }
 
@@ -484,12 +512,15 @@ async def gpt_generate(body: dict):
 
 
 @app.get("/api/gpt/result/{task_id}")
-async def gpt_result(task_id: str):
+async def gpt_result(task_id: str, payload: dict = Depends(verify_token)):
     """查询生图任务结果。"""
-    if not GPTIMAGE_API_KEY:
-        raise HTTPException(400, "服务端未配置 API Key")
+    users = _load_users()
+    user = users.get(payload["sub"], {})
+    api_key = user.get("gpt_api_key", "")
+    if not api_key:
+        raise HTTPException(400, "请先配置 API Key")
 
-    url = f"https://api.wuyinkeji.com/api/async/detail?key={GPTIMAGE_API_KEY}&id={task_id}"
+    url = f"https://api.wuyinkeji.com/api/async/detail?key={api_key}&id={task_id}"
 
     try:
         resp = http_requests.get(url, timeout=10)
