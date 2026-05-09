@@ -446,7 +446,7 @@ async def gpt_status(payload: dict = Depends(verify_token)):
 
 @app.post("/api/gpt/generate")
 async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
-    """提交生图任务到速创 API。"""
+    """提交生图任务到 API。"""
     username = payload["sub"]
     api_key = _get_user_key(username)
     if not api_key:
