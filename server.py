@@ -508,6 +508,9 @@ async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     if not api_key:
         raise HTTPException(400, "请先配置 API Key")
 
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(400, "请输入提示词")
     payload = {
         "prompt": prompt,
         "size": body.get("size", "auto"),
