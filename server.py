@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 import requests as http_requests
 import jwt as pyjwt
-from passlib.context import CryptContext
+import bcrypt as _bcrypt
 from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,33 +39,37 @@ app.add_middleware(
 JWT_SECRET = os.environ.get("JWT_SECRET", "deepnovis-jwt-secret-change-me")
 JWT_ALGO = "HS256"
 JWT_EXPIRE_HOURS = 72
-BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
+USERS_FILE = DATA_DIR / "users.json"
 
 
 def _hash_password(password: str) -> str:
     """
     bcrypt 有 72 字节限制，先 SHA-256 再 hash，支持任意长度密码。
+    使用 bcrypt 直接替代 passlib（passlib 与 bcrypt 5.x 不兼容）。
     """
     digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
-    return BCRYPT.hash(digest)
+    return _bcrypt.hashpw(digest.encode("utf-8"), _bcrypt.gensalt()).decode("utf-8")
 
 
 def _verify_password(password: str, hashed: str) -> bool:
     """
-    验证密码：先试 SHA-256 预处理（新方式），
-    失败后试原始密码（兼容旧数据）。
+    验证密码：先试 SHA-256 预处理（新注册用户），
+    不匹配则试原始密码（兼容旧格式）。
     """
+    # 新格式：sha256(password) → bcrypt
     try:
         digest = hashlib.sha256(password.encode("utf-8")).hexdigest()
-        return BCRYPT.verify(digest, hashed)
+        if _bcrypt.checkpw(digest.encode("utf-8"), hashed.encode("utf-8")):
+            return True
     except Exception:
         pass
+    # 旧格式：直接 password → bcrypt
     try:
-        return BCRYPT.verify(password, hashed)
+        return _bcrypt.checkpw(password.encode("utf-8"), hashed.encode("utf-8"))
     except Exception:
         return False
-
-USERS_FILE = DATA_DIR / "users.json"
+    except Exception:
+        return False
 
 # ── Resend 邮件配置 ──────────────────────────────────────────────────────
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
