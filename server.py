@@ -5,10 +5,8 @@ import mimetypes
 import base64
 import hashlib
 import json
-import smtplib
 import random
 import time
-from email.mime.text import MIMEText
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -44,50 +42,36 @@ JWT_EXPIRE_HOURS = 72
 BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
 USERS_FILE = DATA_DIR / "users.json"
 
-# ── SMTP 邮件配置 ──────────────────────────────────────────────────────────
-SMTP_HOST = os.environ.get("SMTP_HOST", "smtp-relay.brevo.com")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "liuxixi@deepnovis.com.cn")
-SMTP_PASS = os.environ.get("SMTP_PASS", "")
+# ── Resend 邮件配置 ──────────────────────────────────────────────────────
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 
 
 def _send_email(to: str, subject: str, html: str):
-    """发送邮件，支持多端口/协议自动回退。"""
-    msg = MIMEText(html, "html", "utf-8")
-    msg["Subject"] = subject
-    msg["From"] = SMTP_USER
-    msg["To"] = to
+    """通过 Resend API 发送邮件。"""
+    if not RESEND_API_KEY:
+        raise HTTPException(500, "未配置邮件服务")
 
-    errors = []
+    resp = http_requests.post(
+        "https://api.resend.com/emails",
+        headers={
+            "Authorization": f"Bearer {RESEND_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "from": "DeepNovis <onboarding@resend.dev>",
+            "to": [to],
+            "subject": subject,
+            "html": html,
+        },
+        timeout=15,
+    )
 
-    # 优先试配置的端口（SSL 或 STARTTLS），再试备选
-    ports_to_try = []
-    if SMTP_PORT == 465:
-        ports_to_try.append((SMTP_HOST, SMTP_PORT, "ssl"))
-        ports_to_try.append((SMTP_HOST, 587, "starttls"))
-    else:
-        ports_to_try.append((SMTP_HOST, SMTP_PORT, "starttls"))
-        ports_to_try.append((SMTP_HOST, 465, "ssl"))
-
-    for host, port, mode in ports_to_try:
+    if resp.status_code not in (200, 201):
         try:
-            if mode == "ssl":
-                with smtplib.SMTP_SSL(host, port, timeout=10) as server:
-                    server.login(SMTP_USER, SMTP_PASS)
-                    server.send_message(msg)
-            else:
-                with smtplib.SMTP(host, port, timeout=10) as server:
-                    server.starttls()
-                    server.login(SMTP_USER, SMTP_PASS)
-                    server.send_message(msg)
-            return  # 成功
-        except smtplib.SMTPAuthenticationError:
-            raise HTTPException(500, "邮件服务认证失败，请检查授权码")
-        except Exception as e:
-            errors.append(f"{host}:{port}({mode}): {e}")
-            continue
-
-    raise HTTPException(500, f"邮件发送失败: {'; '.join(errors)}")
+            detail = resp.json().get("message", resp.text)
+        except Exception:
+            detail = resp.text[:200]
+        raise HTTPException(500, f"邮件发送失败: {detail}")
 
 # 验证码缓存 { email: { code, expire_at } }
 verify_codes: dict = {}
@@ -352,23 +336,25 @@ async def send_code(body: dict):
             "expire_at": now + CODE_EXPIRE_SECONDS,
         }
         return JSONResponse({"msg": "验证码已发送", "email": email})
+    except HTTPException:
+        raise
     except Exception as e:
-        # _send_email 应已处理，兜底
         raise HTTPException(500, f"邮件发送失败: {e}")
-    except Exception as e:
-        raise HTTPException(500, f"发送失败: {e}")
 
 
-@app.post("/api/auth/login")
-async def auth_login(body: dict):
-    """邮箱 + 验证码登录/注册。新用户自动注册。"""
+@app.post("/api/auth/register")
+async def auth_register(body: dict):
+    """邮箱 + 验证码 + 密码 → 注册新用户。"""
     email = (body.get("email") or "").strip().lower()
     code = (body.get("code") or "").strip()
+    password = (body.get("password") or "").strip()
 
     if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
         raise HTTPException(400, "请输入有效的邮箱地址")
     if not code or len(code) != 6 or not code.isdigit():
         raise HTTPException(400, "请输入 6 位验证码")
+    if len(password) < 6:
+        raise HTTPException(400, "密码至少 6 位字符")
 
     # 校验验证码
     cached = verify_codes.get(email)
@@ -383,31 +369,58 @@ async def auth_login(body: dict):
     # 验证码正确后清除
     verify_codes.pop(email, None)
 
-    # 用户不存在则自动注册
     users = _load_users()
-    if email not in users:
-        # 从邮箱前缀取用户名
-        username = email.split("@")[0]
-        users[email] = {
-            "password": "",  # 邮箱验证不需要密码
-            "email": email,
-            "username": username,
-            "created_at": datetime.now().isoformat(),
-            "gpt_api_key": "",
-        }
-        _save_users(users)
-        is_new = True
-    else:
-        is_new = False
-        username = users[email].get("username", email.split("@")[0])
+    if email in users:
+        raise HTTPException(400, "该邮箱已注册，请直接登录")
+
+    username = email.split("@")[0]
+    users[email] = {
+        "password": _hash_password(password),
+        "email": email,
+        "username": username,
+        "created_at": datetime.now().isoformat(),
+        "gpt_api_key": "",
+    }
+    _save_users(users)
 
     token = create_token(email)
     return JSONResponse({
         "token": token,
         "username": username,
         "email": email,
-        "msg": "登录成功" if not is_new else "注册成功",
-        "is_new": is_new,
+        "msg": "注册成功",
+    })
+
+
+@app.post("/api/auth/login")
+async def auth_login(body: dict):
+    """邮箱 + 密码 → 登录，返回 JWT。"""
+    email = (body.get("email") or "").strip().lower()
+    password = (body.get("password") or "").strip()
+
+    if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
+        raise HTTPException(400, "请输入有效的邮箱地址")
+    if not password:
+        raise HTTPException(400, "请输入密码")
+
+    users = _load_users()
+    user = users.get(email)
+    if not user:
+        raise HTTPException(400, "该邮箱未注册，请先注册")
+
+    if not user.get("password"):
+        raise HTTPException(400, "该账号无密码，请使用注册流程设置密码")
+
+    if not _verify_password(password, user["password"]):
+        raise HTTPException(400, "密码错误")
+
+    token = create_token(email)
+    username = user.get("username", email.split("@")[0])
+    return JSONResponse({
+        "token": token,
+        "username": username,
+        "email": email,
+        "msg": "登录成功",
     })
 
 
@@ -447,33 +460,24 @@ async def update_settings(body: dict, payload: dict = Depends(verify_token)):
 
 # ── GPT-Image-2 代理 API ──────────────────────────────────────────────────
 
-def _get_user_key(username: str) -> str:
-    """获取用户的 API Key。"""
-    users = _load_users()
-    user = users.get(username, {})
-    return user.get("gpt_api_key", "")
-
-
 @app.get("/api/gpt/status")
 async def gpt_status(payload: dict = Depends(verify_token)):
     """查询当前用户 API Key 配置状态。"""
-    key = _get_user_key(payload["sub"])
+    users = _load_users()
+    user = users.get(payload["sub"], {})
     return JSONResponse({
-        "ready": bool(key),
+        "ready": bool(user.get("gpt_api_key", "")),
     })
 
 
 @app.post("/api/gpt/generate")
 async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
-    """提交生图任务到速创 API。"""
-    username = payload["sub"]
-    api_key = _get_user_key(username)
+    """提交生图任务到 API。"""
+    users = _load_users()
+    user = users.get(payload["sub"], {})
+    api_key = user.get("gpt_api_key", "")
     if not api_key:
-        raise HTTPException(400, "请先在个人中心配置 API Key")
-
-    prompt = body.get("prompt", "").strip()
-    if not prompt:
-        raise HTTPException(400, "请输入提示词")
+        raise HTTPException(400, "请先配置 API Key")
 
     payload = {
         "prompt": prompt,
@@ -512,10 +516,11 @@ async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
 @app.get("/api/gpt/result/{task_id}")
 async def gpt_result(task_id: str, payload: dict = Depends(verify_token)):
     """查询生图任务结果。"""
-    username = payload["sub"]
-    api_key = _get_user_key(username)
+    users = _load_users()
+    user = users.get(payload["sub"], {})
+    api_key = user.get("gpt_api_key", "")
     if not api_key:
-        raise HTTPException(400, "请先在个人中心配置 API Key")
+        raise HTTPException(400, "请先配置 API Key")
 
     url = f"https://api.wuyinkeji.com/api/async/detail?key={api_key}&id={task_id}"
 
