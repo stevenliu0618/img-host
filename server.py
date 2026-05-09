@@ -50,6 +50,42 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
 SMTP_USER = os.environ.get("SMTP_USER", "liuxixi@deepnovis.com.cn")
 SMTP_PASS = os.environ.get("SMTP_PASS", "gfeKYWqDiUZFzvfd")
 
+
+def _send_email(to: str, subject: str, html: str):
+    """发送邮件，支持多端口/协议自动回退。"""
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USER
+    msg["To"] = to
+
+    errors = []
+
+    # 优先使用用户配置的端口，不行再试其他
+    ports_to_try = [(SMTP_HOST, SMTP_PORT, "ssl")]
+    if SMTP_PORT != 465:
+        ports_to_try.append(("smtp.qq.com", 465, "ssl"))
+    ports_to_try.append(("smtp.qq.com", 587, "starttls"))
+
+    for host, port, mode in ports_to_try:
+        try:
+            if mode == "ssl":
+                with smtplib.SMTP_SSL(host, port, timeout=10) as server:
+                    server.login(SMTP_USER, SMTP_PASS)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(host, port, timeout=10) as server:
+                    server.starttls()
+                    server.login(SMTP_USER, SMTP_PASS)
+                    server.send_message(msg)
+            return  # 成功
+        except smtplib.SMTPAuthenticationError:
+            raise HTTPException(500, "邮件服务认证失败，请检查授权码")
+        except Exception as e:
+            errors.append(f"{host}:{port}({mode}): {e}")
+            continue
+
+    raise HTTPException(500, f"邮件发送失败: {'; '.join(errors)}")
+
 # 验证码缓存 { email: { code, expire_at } }
 verify_codes: dict = {}
 CODE_EXPIRE_SECONDS = 300  # 5 分钟
@@ -296,21 +332,16 @@ async def send_code(body: dict):
 
     # 发送邮件
     try:
-        msg = MIMEText(
-            f"""<div style="font-family:-apple-system,sans-serif;padding:24px;max-width:400px;margin:0 auto;">
+        _send_email(
+            to=email,
+            subject=f"DeepNovis 登录验证码 · {code}",
+            html=f"""<div style="font-family:-apple-system,sans-serif;padding:24px;max-width:400px;margin:0 auto;">
 <h2 style="font-size:18px;margin-bottom:12px;">DeepNovis 登录验证</h2>
 <p style="font-size:14px;color:#555;margin-bottom:20px;">你的验证码为：</p>
 <div style="font-size:36px;font-weight:700;letter-spacing:8px;text-align:center;color:#0071e3;padding:16px;background:#f5f5f7;border-radius:12px;">{code}</div>
 <p style="font-size:12px;color:#999;margin-top:20px;">验证码 5 分钟内有效，请勿泄露给他人。</p>
-</div>""",
-            "html", "utf-8")
-        msg["Subject"] = f"DeepNovis 登录验证码 · {code}"
-        msg["From"] = SMTP_USER
-        msg["To"] = email
-
-        with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=10) as server:
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(msg)
+</div>"""
+        )
 
         verify_codes[email] = {
             "code": code,
@@ -318,9 +349,8 @@ async def send_code(body: dict):
             "expire_at": now + CODE_EXPIRE_SECONDS,
         }
         return JSONResponse({"msg": "验证码已发送", "email": email})
-    except smtplib.SMTPAuthenticationError:
-        raise HTTPException(500, "邮件服务认证失败，请联系管理员")
-    except smtplib.SMTPException as e:
+    except Exception as e:
+        # _send_email 应已处理，兜底
         raise HTTPException(500, f"邮件发送失败: {e}")
     except Exception as e:
         raise HTTPException(500, f"发送失败: {e}")
