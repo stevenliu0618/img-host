@@ -307,6 +307,71 @@
     .page-title { font-size: 24px; }
     .form-row { flex-direction: column; }
   }
+
+  /* ── 认证弹窗 ── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(0,0,0,0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal-box {
+    background: var(--surface); border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+    padding: 32px; width: 360px; max-width: 90vw;
+    animation: modalIn 0.2s ease;
+  }
+  @keyframes modalIn { from { opacity: 0; transform: scale(0.95) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+  .modal-box h2 { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .modal-box .modal-sub { font-size: 13px; color: var(--sub); margin-bottom: 24px; }
+  .modal-box .form-group { margin-bottom: 14px; }
+  .modal-box .form-group:last-of-type { margin-bottom: 20px; }
+  .modal-box .auth-error {
+    display: none; font-size: 13px; color: var(--red);
+    background: #fee8e6; padding: 8px 12px; border-radius: 8px;
+    margin-bottom: 14px;
+  }
+  .modal-box .auth-error.show { display: block; }
+  .modal-box .auth-switch {
+    text-align: center; margin-top: 16px;
+    font-size: 13px; color: var(--sub);
+  }
+  .modal-box .auth-switch a { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .modal-box .auth-switch a:hover { text-decoration: underline; }
+
+  /* ── 用户头像/菜单 ── */
+  .user-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 10px 4px 4px; border-radius: 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: all .15s; color: var(--text);
+  }
+  .user-btn:hover { border-color: var(--accent); }
+  .user-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600;
+  }
+  .user-menu {
+    display: none; position: absolute; top: 44px; right: 0; z-index: 100;
+    background: var(--surface); border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    border: 1px solid var(--border); min-width: 160px;
+    overflow: hidden;
+  }
+  .user-menu.show { display: block; }
+  .user-menu-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 16px; font-size: 13px; cursor: pointer;
+    transition: background .1s; color: var(--text);
+  }
+  .user-menu-item:hover { background: var(--bg); }
+  .user-menu-item.danger { color: var(--red); }
+  .user-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
 </style>
 </head>
 <body>
@@ -320,8 +385,23 @@
       <a href="/prompt-editor" class="nav-tab active"><i class="fa-solid fa-wand-magic-sparkles" style="margin-right:3px;"></i>AI绘图</a>
     </div>
   </nav>
-  <div style="display:flex;gap:12px;align-items:center;">
+  <div style="display:flex;gap:12px;align-items:center;position:relative;">
     <span class="badge">GPT-Image-2 · 0.1元/张</span>
+    <div id="authArea">
+      <button class="btn-sm btn-sm-blue" id="loginBtn" style="display:none;"><i class="fa-regular fa-circle-user"></i> 登录</button>
+      <div id="userArea" style="display:none;position:relative;">
+        <button class="user-btn" id="userBtn">
+          <span class="user-avatar" id="userAvatar">U</span>
+          <span id="userName">用户</span>
+          <i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--sub);"></i>
+        </button>
+        <div class="user-menu" id="userMenu">
+          <div class="user-menu-item"><i class="fa-regular fa-user"></i> <span id="menuUserName">用户</span></div>
+          <div class="user-menu-divider"></div>
+          <div class="user-menu-item danger" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> 退出登录</div>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -427,6 +507,30 @@
     </div>
   </div>
 
+</div>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal-box">
+    <h2 id="authModalTitle">登录</h2>
+    <div class="modal-sub" id="authModalSub">登录后即可使用 AI 绘图</div>
+    <div class="auth-error" id="authError"></div>
+    <div class="form-group">
+      <label class="form-label">用户名</label>
+      <input type="text" id="authUsername" placeholder="输入用户名" autocomplete="username" />
+    </div>
+    <div class="form-group">
+      <label class="form-label">密码</label>
+      <input type="password" id="authPassword" placeholder="输入密码" autocomplete="current-password" />
+    </div>
+    <button class="btn btn-primary" id="authSubmitBtn">
+      <span id="authSubmitText">登录</span>
+    </button>
+    <div class="auth-switch">
+      <span id="authSwitchText">还没有账号？</span>
+      <a id="authSwitchLink">注册</a>
+    </div>
+  </div>
 </div>
 
 <!-- Toast -->
@@ -612,10 +716,106 @@
     a.download='gpt-image2-'+Date.now()+'.png'; a.target='_blank'; a.click()
   })
 
+  // ── 认证状态 ──
+  let authToken = (() => { try { return localStorage.getItem('deepnovis_token') } catch { return null } })()
+  let currentUser = (() => { try { return localStorage.getItem('deepnovis_user') || '' } catch { return '' } })()
+
+  function authHeaders() {
+    return authToken ? { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' }
+  }
+
+  function authFetch(url, opts) {
+    const h = authHeaders()
+    return fetch(url, { ...opts, headers: { ...h, ...(opts?.headers || {}) } })
+  }
+
+  function saveAuth(token, username) {
+    authToken = token; currentUser = username
+    if (token) { try { localStorage.setItem('deepnovis_token', token); localStorage.setItem('deepnovis_user', username) } catch {} }
+    else { try { localStorage.removeItem('deepnovis_token'); localStorage.removeItem('deepnovis_user') } catch {} }
+    renderAuthUI()
+  }
+
+  function showAuthModal(mode) {
+    const modal = $('#authModal')
+    modal.classList.add('show')
+    $('#authModalTitle').textContent = mode === 'register' ? '注册' : '登录'
+    $('#authModalSub').textContent = mode === 'register' ? '创建账号后即可使用 AI 绘图' : '登录后即可使用 AI 绘图'
+    $('#authSubmitText').textContent = mode === 'register' ? '注册' : '登录'
+    $('#authSwitchText').textContent = mode === 'register' ? '已有账号？' : '还没有账号？'
+    $('#authSwitchLink').textContent = mode === 'register' ? '登录' : '注册'
+    $('#authError').classList.remove('show'); $('#authError').textContent = ''
+    $('#authUsername').value = ''; $('#authPassword').value = ''
+    $('#authUsername').focus()
+    modal._mode = mode
+  }
+
+  function hideAuthModal() { $('#authModal').classList.remove('show') }
+
+  function renderAuthUI() {
+    const loginBtn = $('#loginBtn'); const userArea = $('#userArea')
+    if (authToken && currentUser) {
+      loginBtn.style.display = 'none'; userArea.style.display = 'block'
+      $('#userAvatar').textContent = currentUser.charAt(0).toUpperCase()
+      $('#userName').textContent = currentUser
+      $('#menuUserName').textContent = currentUser
+    } else {
+      loginBtn.style.display = ''; userArea.style.display = 'none'
+    }
+  }
+
+  // ── Auth 模态框 ──
+  $('#loginBtn').addEventListener('click', () => showAuthModal('login'))
+  $('#authSwitchLink').addEventListener('click', (e) => {
+    const modal = $('#authModal')
+    showAuthModal(modal._mode === 'register' ? 'login' : 'register')
+  })
+  $('#authSubmitBtn').addEventListener('click', async () => {
+    const modal = $('#authModal')
+    const mode = modal._mode || 'login'
+    const username = $('#authUsername').value.trim()
+    const password = $('#authPassword').value
+    const errEl = $('#authError')
+
+    if (!username || !password) { errEl.textContent = '请填写用户名和密码'; errEl.classList.add('show'); return }
+
+    const btn = $('#authSubmitBtn'); const btnText = $('#authSubmitText')
+    btn.disabled = true; btnText.textContent = '处理中…'
+
+    try {
+      const r = await fetch('/api/auth/' + mode, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+      const d = await r.json()
+      if (!r.ok) { errEl.textContent = d.detail || '操作失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = mode === 'register' ? '注册' : '登录'; return }
+      saveAuth(d.token, d.username)
+      hideAuthModal()
+      showToast(d.msg)
+    } catch (e) {
+      errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show')
+    }
+    btn.disabled = false; btnText.textContent = mode === 'register' ? '注册' : '登录'
+  })
+
+  $('#authModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) hideAuthModal() })
+  $('#authPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#authSubmitBtn').click() })
+
+  // ── 用户菜单 ──
+  $('#userBtn').addEventListener('click', (e) => { e.stopPropagation(); $('#userMenu').classList.toggle('show') })
+  document.addEventListener('click', () => $('#userMenu').classList.remove('show'))
+  $('#logoutBtn').addEventListener('click', () => {
+    saveAuth(null, '')
+    $('#userMenu').classList.remove('show')
+    showToast('已退出登录')
+  })
+
   // ── 检查服务端 API Key 状态 ──
   async function fetchKeyStatus() {
     try {
-      const r=await fetch('/api/gpt/status'); const d=await r.json()
+      const r = await authFetch('/api/gpt/status'); const d = await r.json()
+      if (r.status === 401) { keyIndicator.textContent = '请先登录'; keyIndicator.style.color = 'var(--orange)'; return }
       if (d.ready) {
         keyIndicator.textContent = '✓ ' + d.keyHint; keyIndicator.style.color = 'var(--green)'
       } else {
@@ -629,6 +829,8 @@
 
   // ── 生成 ──
   genBtn.addEventListener('click', async () => {
+    if (!authToken) { showAuthModal('login'); return }
+
     const prompt = promptEl.value.trim()
     if (!prompt) { showToast('请输入提示词'); promptEl.focus(); return }
 
@@ -640,13 +842,12 @@
     setStatus('pending', '正在提交任务…', 'fa-circle-notch fa-spin')
 
     try {
-      // 1️⃣ 提交
-      const r1 = await fetch('/api/gpt/generate', {
+      const r1 = await authFetch('/api/gpt/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, size: sizeEl.value, urls })
       })
       const d1 = await r1.json()
+      if (r1.status === 401) { saveAuth(null, ''); showAuthModal('login'); return }
       if (!r1.ok) throw new Error(d1.detail || d1.msg || '提交失败')
       if (d1.code !== 200 || !d1.data?.id) throw new Error(d1.msg || '提交失败')
 
@@ -655,14 +856,12 @@
       genBtnText.innerHTML = '<span class="spinner"></span> 生成中…'
       polling = true
 
-      // 2️⃣ 轮询
       const poll = async () => {
         try {
-          const r2 = await fetch('/api/gpt/result/' + encodeURIComponent(taskId))
+          const r2 = await authFetch('/api/gpt/result/' + encodeURIComponent(taskId))
           const d2 = await r2.json()
 
           if (d2.code === 1 && d2.data) {
-            // 成功
             showResult(d2.data)
             addHistory(prompt, sizeEl.value, d2.data)
             polling = false
@@ -673,7 +872,6 @@
             throw new Error(d2.msg || '生成失败')
           }
 
-          // 处理中，继续轮询
           pollTimer = setTimeout(poll, 2000)
         } catch (e) {
           setStatus('error', '查询出错: ' + e.message, 'fa-circle-exclamation')
@@ -700,6 +898,7 @@
   window.addEventListener('beforeunload', () => { if (pollTimer) clearTimeout(pollTimer) })
 
   // ── 初始化 ──
+  renderAuthUI()
   renderHistory()
 })()
 </script>

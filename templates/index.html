@@ -46,6 +46,68 @@
   .nav-tab:hover { background:var(--card); color:var(--text); }
   .nav-tab.active { background:var(--card); color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,0.1); }
   .header-right { display: flex; align-items: center; gap: 12px; }
+  .btn-sm { padding:8px 18px; border-radius:8px; font-size:13px; font-weight:500; cursor:pointer; border:none; transition:all .15s; }
+  .btn-sm-blue { background:var(--accent); color:#fff; }
+  .btn-sm-blue:hover { background:var(--accent-hover); }
+  .user-btn {
+    display:flex;align-items:center;gap:8px;
+    padding:4px 10px 4px 4px;border-radius:20px;
+    background:var(--card);border:1px solid var(--border);
+    cursor:pointer;font-size:13px;font-weight:500;
+    transition:all .15s;color:var(--text);
+  }
+  .user-btn:hover { border-color:var(--accent); }
+  .user-avatar {
+    width:28px;height:28px;border-radius:50%;
+    background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:600;
+  }
+  .user-menu {
+    display:none;position:absolute;top:44px;right:0;z-index:100;
+    background:var(--card);border-radius:12px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.12);
+    border:1px solid var(--border);min-width:160px;overflow:hidden;
+  }
+  .user-menu.show { display:block; }
+  .user-menu-item {
+    display:flex;align-items:center;gap:10px;
+    padding:10px 16px;font-size:13px;cursor:pointer;
+    transition:background .1s;color:var(--text);
+  }
+  .user-menu-item:hover { background:var(--bg); }
+  .user-menu-item.danger { color:#ff453a; }
+  .user-menu-divider { height:1px;background:var(--border);margin:4px 0; }
+  .modal-overlay {
+    display:none;position:fixed;inset:0;z-index:200;
+    background:rgba(0,0,0,0.4);
+    backdrop-filter:blur(4px);
+    -webkit-backdrop-filter:blur(4px);
+    align-items:center;justify-content:center;
+  }
+  .modal-overlay.show { display:flex; }
+  .modal-box {
+    background:var(--card);border-radius:18px;
+    box-shadow:0 12px 40px rgba(0,0,0,0.15);
+    padding:32px;width:360px;max-width:90vw;
+    animation:modalIn 0.2s ease;
+  }
+  @keyframes modalIn { from{opacity:0;transform:scale(0.95) translateY(8px)} to{opacity:1;transform:scale(1) translateY(0)} }
+  .modal-box h2 { font-size:20px;font-weight:700;margin-bottom:4px; }
+  .modal-box .modal-sub { font-size:13px;color:var(--sub);margin-bottom:24px; }
+  .modal-box input {
+    font-family:inherit;font-size:15px;width:100%;
+    border:1.5px solid var(--border);border-radius:10px;
+    padding:12px 14px;background:var(--card);color:var(--text);
+    outline:none;transition:border-color .25s;
+  }
+  .modal-box input:focus { border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,113,227,0.15); }
+  .modal-box .form-group { margin-bottom:14px; }
+  .modal-box .form-group:last-of-type { margin-bottom:20px; }
+  .modal-box .auth-error { display:none;font-size:13px;color:#ff453a;background:#fee8e6;padding:8px 12px;border-radius:8px;margin-bottom:14px; }
+  .modal-box .auth-error.show { display:block; }
+  .modal-box .auth-switch { text-align:center;margin-top:16px;font-size:13px;color:var(--sub); }
+  .modal-box .auth-switch a { color:var(--accent);cursor:pointer;text-decoration:none; }
   .badge {
     font-size: 12px; color: var(--sub);
     background: rgba(0,0,0,0.05);
@@ -319,6 +381,21 @@
       <button class="fmt-tab" data-fmt="markdown">Markdown</button>
       <button class="fmt-tab" data-fmt="html">HTML</button>
     </div>
+    <div id="authArea">
+      <button class="btn-sm btn-sm-blue" id="loginBtn" style="display:none;"><i class="fa-regular fa-circle-user"></i> 登录</button>
+      <div id="userArea" style="display:none;position:relative;">
+        <button class="user-btn" id="userBtn">
+          <span class="user-avatar" id="userAvatar">U</span>
+          <span id="userName">用户</span>
+          <i class="fa-solid fa-chevron-down" style="font-size:10px;color:var(--sub);"></i>
+        </button>
+        <div class="user-menu" id="userMenu">
+          <div class="user-menu-item"><i class="fa-regular fa-user"></i> <span id="menuUserName">用户</span></div>
+          <div class="user-menu-divider"></div>
+          <div class="user-menu-item danger" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> 退出登录</div>
+        </div>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -347,6 +424,31 @@
   </div>
   <div id="image-grid"></div>
 </main>
+
+<!-- Auth Modal -->
+<div class="modal-overlay" id="authModal">
+  <div class="modal-box">
+    <h2 id="authModalTitle">登录</h2>
+    <div class="modal-sub" id="authModalSub">登录后即可使用全部功能</div>
+    <div class="auth-error" id="authError"></div>
+    <div class="form-group">
+      <input type="text" id="authUsername" placeholder="用户名" autocomplete="username" />
+    </div>
+    <div class="form-group">
+      <input type="password" id="authPassword" placeholder="密码" autocomplete="current-password" />
+    </div>
+    <button class="btn-upload" id="authSubmitBtn" style="width:100%;justify-content:center;border-radius:12px;">
+      <span id="authSubmitText">登录</span>
+    </button>
+    <div class="auth-switch">
+      <span id="authSwitchText">还没有账号？</span>
+      <a id="authSwitchLink">注册</a>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:rgba(29,29,31,0.92);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transition:all 0.3s ease;pointer-events:none;backdrop-filter:blur(8px);z-index:999;"></div>
 
 <!-- Toast -->
 <div id="toast-container"></div>
@@ -586,8 +688,79 @@ document.getElementById('modal-fmt-tabs').addEventListener('click', e => {
   updateModalUrl();
 });
 
+// ── 认证 ──────────────────────────────────────────────────────────────────
+let authToken = (() => { try { return localStorage.getItem('deepnovis_token') } catch { return null } })()
+let currentUser = (() => { try { return localStorage.getItem('deepnovis_user') || '' } catch { return '' } })()
+
+function saveAuth(token, username) {
+  authToken = token; currentUser = username
+  if (token) { try { localStorage.setItem('deepnovis_token', token); localStorage.setItem('deepnovis_user', username) } catch {} }
+  else { try { localStorage.removeItem('deepnovis_token'); localStorage.removeItem('deepnovis_user') } catch {} }
+  renderAuthUI()
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.style.opacity = '1'; t.style.transform = 'translateX(-50%) translateY(0)';
+  clearTimeout(t._t); t._t = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(80px)' }, 2000);
+}
+
+function showAuthModal(mode) {
+  const modal = document.getElementById('authModal'); modal.classList.add('show');
+  document.getElementById('authModalTitle').textContent = mode === 'register' ? '注册' : '登录';
+  document.getElementById('authModalSub').textContent = mode === 'register' ? '创建账号后使用全部功能' : '登录后使用全部功能';
+  document.getElementById('authSubmitText').textContent = mode === 'register' ? '注册' : '登录';
+  document.getElementById('authSwitchText').textContent = mode === 'register' ? '已有账号？' : '还没有账号？';
+  document.getElementById('authSwitchLink').textContent = mode === 'register' ? '登录' : '注册';
+  document.getElementById('authError').classList.remove('show'); document.getElementById('authError').textContent = '';
+  document.getElementById('authUsername').value = ''; document.getElementById('authPassword').value = '';
+  document.getElementById('authUsername').focus();
+  modal._mode = mode;
+}
+function hideAuthModal() { document.getElementById('authModal').classList.remove('show') }
+function renderAuthUI() {
+  const loginBtn = document.getElementById('loginBtn'); const userArea = document.getElementById('userArea');
+  if (authToken && currentUser) {
+    loginBtn.style.display = 'none'; userArea.style.display = 'block';
+    document.getElementById('userAvatar').textContent = currentUser.charAt(0).toUpperCase();
+    document.getElementById('userName').textContent = currentUser;
+    document.getElementById('menuUserName').textContent = currentUser;
+  } else {
+    loginBtn.style.display = ''; userArea.style.display = 'none';
+  }
+}
+
+document.getElementById('loginBtn')?.addEventListener('click', () => showAuthModal('login'));
+document.getElementById('authSwitchLink')?.addEventListener('click', () => {
+  const m = document.getElementById('authModal');
+  showAuthModal(m._mode === 'register' ? 'login' : 'register');
+});
+document.getElementById('authSubmitBtn')?.addEventListener('click', async () => {
+  const modal = document.getElementById('authModal');
+  const mode = modal._mode || 'login';
+  const username = document.getElementById('authUsername').value.trim();
+  const password = document.getElementById('authPassword').value;
+  const errEl = document.getElementById('authError');
+  if (!username || !password) { errEl.textContent = '请填写用户名和密码'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('authSubmitBtn'); const btnText = document.getElementById('authSubmitText');
+  btn.disabled = true; btnText.textContent = '处理中…';
+  try {
+    const r = await fetch('/api/auth/' + mode, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({username,password}) });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.detail || '操作失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = mode === 'register' ? '注册' : '登录'; return; }
+    saveAuth(d.token, d.username); hideAuthModal(); showToast(d.msg);
+  } catch(e) { errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show'); }
+  btn.disabled = false; btnText.textContent = mode === 'register' ? '注册' : '登录';
+});
+document.getElementById('authModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) hideAuthModal() });
+document.getElementById('authPassword')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('authSubmitBtn').click() });
+document.getElementById('userBtn')?.addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('userMenu').classList.toggle('show') });
+document.addEventListener('click', () => document.getElementById('userMenu')?.classList.remove('show'));
+document.getElementById('logoutBtn')?.addEventListener('click', () => { saveAuth(null, ''); document.getElementById('userMenu')?.classList.remove('show'); showToast('已退出登录'); });
+
 // ── 初始化 ────────────────────────────────────────────────────────────────
 loadImages();
+renderAuthUI();
 </script>
 </body>
 </html>

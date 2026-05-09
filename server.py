@@ -6,10 +6,12 @@ import base64
 import hashlib
 import json
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import requests as http_requests
-from fastapi import FastAPI, File, UploadFile, HTTPException
+import jwt as pyjwt
+from passlib.context import CryptContext
+from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from github import Github, GithubException
@@ -30,6 +32,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── 认证配置 ────────────────────────────────────────────────────────────────
+JWT_SECRET = os.environ.get("JWT_SECRET", "deepnovis-jwt-secret-change-me")
+JWT_ALGO = "HS256"
+JWT_EXPIRE_HOURS = 72
+BCRYPT = CryptContext(schemes=["bcrypt"], deprecated="auto")
+USERS_FILE = DATA_DIR / "users.json"
+
+
+def _load_users() -> dict:
+    if USERS_FILE.exists():
+        return json.loads(USERS_FILE.read_text(encoding="utf-8"))
+    return {}
+
+
+def _save_users(users: dict):
+    USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    USERS_FILE.write_text(json.dumps(users, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def create_token(username: str) -> str:
+    payload = {
+        "sub": username,
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRE_HOURS),
+    }
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def verify_token(authorization: str | None = Header(None)) -> dict:
+    """验证 JWT token，返回用户信息。未认证时直接 401。"""
+    if not authorization:
+        raise HTTPException(401, "未登录")
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise HTTPException(401, "认证格式错误")
+    try:
+        payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        return payload
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(401, "登录已过期，请重新登录")
+    except pyjwt.InvalidTokenError:
+        raise HTTPException(401, "无效的登录凭证")
+    except Exception:
+        raise HTTPException(401, "认证失败")
+
+
+def optional_auth(authorization: str | None = Header(None)) -> dict | None:
+    """可选认证，无 token 时返回 None 不报错。"""
+    if not authorization:
+        return None
+    try:
+        return verify_token.__wrapped__(authorization)
+    except HTTPException:
+        return None
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────
 def safe_filename(name: str) -> str:
@@ -204,6 +261,66 @@ async def health():
     return JSONResponse({"status": "ok", "github_configured": bool(GITHUB_TOKEN)})
 
 
+# ── 用户认证 API ────────────────────────────────────────────────────────────
+
+@app.post("/api/auth/register")
+async def register(body: dict):
+    """注册新用户。"""
+    username = (body.get("username") or "").strip()
+    password = (body.get("password") or "").strip()
+    if not username or not password:
+        raise HTTPException(400, "用户名和密码不能为空")
+    if len(username) < 2 or len(username) > 20:
+        raise HTTPException(400, "用户名长度需在 2-20 个字符之间")
+    if len(password) < 6:
+        raise HTTPException(400, "密码长度至少 6 位")
+    if not re.match(r"^[a-zA-Z0-9_\u4e00-\u9fff]+$", username):
+        raise HTTPException(400, "用户名只能包含字母、数字、下划线和中文")
+
+    users = _load_users()
+    if username in users:
+        raise HTTPException(409, "用户名已被注册")
+
+    users[username] = {
+        "password": BCRYPT.hash(password),
+        "created_at": datetime.now().isoformat(),
+        "avatar": "",
+    }
+    _save_users(users)
+
+    token = create_token(username)
+    return JSONResponse({"token": token, "username": username, "msg": "注册成功"})
+
+
+@app.post("/api/auth/login")
+async def login(body: dict):
+    """用户登录。"""
+    username = (body.get("username") or "").strip()
+    password = (body.get("password") or "").strip()
+    if not username or not password:
+        raise HTTPException(400, "用户名和密码不能为空")
+
+    users = _load_users()
+    user = users.get(username)
+    if not user or not BCRYPT.verify(password, user["password"]):
+        raise HTTPException(401, "用户名或密码错误")
+
+    token = create_token(username)
+    return JSONResponse({"token": token, "username": username, "msg": "登录成功"})
+
+
+@app.get("/api/auth/me")
+async def auth_me(payload: dict = Depends(verify_token)):
+    """获取当前登录用户信息。"""
+    username = payload["sub"]
+    users = _load_users()
+    user = users.get(username, {})
+    return JSONResponse({
+        "username": username,
+        "created_at": user.get("created_at", ""),
+    })
+
+
 # ── GPT-Image-2 代理 API ──────────────────────────────────────────────────
 
 # 服务端 API Key（硬编码，前端零接触）
@@ -211,7 +328,7 @@ GPTIMAGE_API_KEY = "z257spNXb7V9nbYpIiH5JMh3VM"
 
 
 @app.get("/api/gpt/status")
-async def gpt_status():
+async def gpt_status(payload: dict = Depends(verify_token)):
     """查询 API Key 配置状态（不暴露完整 Key）。"""
     return JSONResponse({
         "ready": True,
@@ -220,7 +337,7 @@ async def gpt_status():
 
 
 @app.post("/api/gpt/generate")
-async def gpt_generate(body: dict):
+async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     """提交生图任务到速创 API。"""
     if not GPTIMAGE_API_KEY:
         raise HTTPException(400, "服务端未配置 API Key")
@@ -254,7 +371,7 @@ async def gpt_generate(body: dict):
 
 
 @app.get("/api/gpt/result/{task_id}")
-async def gpt_result(task_id: str):
+async def gpt_result(task_id: str, payload: dict = Depends(verify_token)):
     """查询生图任务结果。"""
     if not GPTIMAGE_API_KEY:
         raise HTTPException(400, "服务端未配置 API Key")
