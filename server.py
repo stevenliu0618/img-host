@@ -497,11 +497,12 @@ def get_github():
 
 
 def push_to_github(filename: str, file_bytes: bytes):
-    """通过 GitHub API 把图片推送到仓库。"""
+    """通过 GitHub API 把图片推送到仓库。
+    PyGithub 的 create_file/update_file 内部会自动 base64 编码，
+    所以传入原始 bytes 即可，不要手动编码。"""
     g = get_github()
     repo = g.get_repo(GITHUB_REPO)
     path = f"assets/{filename}"
-    b64 = base64.b64encode(file_bytes).decode()
     sha = None
     try:
         existing = repo.get_contents(path)
@@ -512,9 +513,9 @@ def push_to_github(filename: str, file_bytes: bytes):
 
     msg = f"upload: {filename}"
     if sha:
-        repo.update_file(path, msg, b64, sha)
+        repo.update_file(path, msg, file_bytes, sha)
     else:
-        repo.create_file(path, msg, b64)
+        repo.create_file(path, msg, file_bytes)
 
 
 def delete_from_github(filename: str):
