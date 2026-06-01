@@ -3,11 +3,13 @@ __pycache__/
 *.pyo
 .env
 .env.prod
+.env.*
+*.key
+config/secrets.yaml
 .venv
 venv/
 *.log
 data/
 .workbuddy/
 .DS_Store
-*.key
-config/secrets.yaml
+*.bak
