@@ -421,7 +421,30 @@ async def delete_image(filename: str):
     # 删本地缓存
     target.unlink(missing_ok=True)
     return JSONResponse({"ok": True, "filename": safe_name})
-
+@app.get("/api/proxy/{path:path}")
+async def proxy_image(path: str):
+    """
+    代理访问 GitHub Raw 图片，解决 raw.githubusercontent.com 在部分地区无法访问的问题。
+    访问 https://deepnovis.com/api/proxy/assets/xxx 会代理到
+    https://raw.githubusercontent.com/stevenliu0618/images/main/assets/xxx
+    """
+    import requests as _requests
+    
+    if not path.startswith("assets/"):
+        raise HTTPException(400, "只允许访问 assets 目录")
+    
+    github_raw_url = f"https://raw.githubusercontent.com/stevenliu0618/images/main/{path}"
+    
+    try:
+        resp = _requests.get(github_raw_url, timeout=15)
+        if resp.status_code != 200:
+            raise HTTPException(502, f"GitHub 返回 {resp.status_code}")
+        from starlette.responses import Response
+        return Response(content=resp.content, media_type=resp.headers.get("Content-Type", "image/png"))
+    except _requests.Timeout:
+        raise HTTPException(502, "GitHub 请求超时")
+    except Exception as e:
+        raise HTTPException(502, f"代理失败: {e}")
 @app.get("/api/health")
 async def health():
     return JSONResponse({"status": "ok", "github_configured": bool(GITHUB_TOKEN)})
