@@ -580,7 +580,7 @@ async def prompt_editor():
 
 # ── 路由：图片上传 ────────────────────────────────────────────────────
 @app.post("/api/upload")
-async def upload(file: UploadFile = File(...), payload: dict = Depends(verify_admin)):
+async def upload(file: UploadFile = File(...), payload: dict | None = Depends(optional_auth)):
     mime = file.content_type or mimetypes.guess_type(file.filename or "")[0] or ""
     if mime not in ALLOWED_TYPES:
         raise HTTPException(400, f"不支持的文件类型: {mime}")
