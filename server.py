@@ -7,6 +7,8 @@ import hashlib
 import json
 import random
 import time
+import logging
+import threading
 from pathlib import Path
 from datetime import datetime, timedelta
 
@@ -16,35 +18,147 @@ import bcrypt as _bcrypt
 import psycopg2
 from psycopg2.extras import DictCursor
 from psycopg2 import pool
-from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Header, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from github import Github, GithubException
 
+# ── 日志配置 ──────────────────────────────────────────────────────────────
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
 # ── 配置 ──────────────────────────────────────────────────────────────────
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_REPO  = os.environ.get("GITHUB_REPO", "stevenliu0618/images")
-GITHUB_RAW_BASE = "https://raw.githubusercontent.com/stevenliu0618/images/main/assets"
+# jsDelivr CDN URL，动态基于 GITHUB_REPO 生成，无需硬编码
+GITHUB_RAW_BASE = f"https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@main/assets"
 DATA_DIR    = Path(os.environ.get("DATA_DIR", "/data"))
 ASSETS_DIR  = DATA_DIR / "assets"
-ALLOWED_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"}
+ALLOWED_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}  # SVG 已移除（XSS 风险）
+
+# ── CORS 配置 ─────────────────────────────────────────────────────────────
+ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "")  # 例如: https://deepnovis.com
 
 app = FastAPI(title="图床上传服务")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if ALLOWED_ORIGIN:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[ALLOWED_ORIGIN],
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+else:
+    logger.warning("⚠️ 未设置 ALLOWED_ORIGIN，CORS 允许所有来源（生产环境不安全）")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# ── 认证配置 ────────────────────────────────────────────────────────────────
-JWT_SECRET = os.environ.get("JWT_SECRET", "deepnovis-jwt-secret-change-me")
+# ── JWT 配置（强制要求环境变量）───────────────────────────────────────────
+JWT_SECRET = os.environ.get("JWT_SECRET", "")
+if not JWT_SECRET:
+    logger.error("❌ JWT_SECRET 环境变量未设置，拒绝启动。请设置：export JWT_SECRET=<随机字符串>")
+    exit(1)
 JWT_ALGO = "HS256"
 JWT_EXPIRE_HOURS = 72
-# ── PostgreSQL 配置 ──────────────────────────────────────────────────────
+
+# ── API Key 加密（Fernet 对称加密）────────────────────────────────────────
+_fernet_key = None
+
+def _get_fernet():
+    global _fernet_key
+    if _fernet_key is None:
+        digest = hashlib.sha256(JWT_SECRET.encode()).digest()
+        _fernet_key = base64.urlsafe_b64encode(digest)
+    from cryptography.fernet import Fernet
+    return Fernet(_fernet_key)
+
+def _encrypt_api_key(key: str) -> str:
+    if not key:
+        return ""
+    f = _get_fernet()
+    return f.encrypt(key.encode()).decode()
+
+def _decrypt_api_key(encrypted: str) -> str:
+    if not encrypted:
+        return ""
+    f = _get_fernet()
+    return f.decrypt(encrypted.encode()).decode()
+
+# ── 暴力破解防护（IP + 邮箱双维度限速）────────────────────────────────────
+_ip_rate_limit: dict = {}        # { ip: { count, reset_at } }
+_verification_attempts: dict = {}  # { email: [(code_hash, timestamp), ...] }
+_max_VERIFICATION_FAILURES = 10   # 验证码连续错误 10 次后封禁该邮箱 30 分钟
+_VERIFICATION_FAIL_WINDOW = 1800   # 30 分钟窗口
+_CODE_LENGTH = 8                  # 8 位数字字母混合（10^8 穷举难度）
+
+# 定期清理过期记录，防止内存泄漏
+def _cleanup_rate_limit():
+    now = time.time()
+    cutoff = now - 600
+    for ip in list(_ip_rate_limit.keys()):
+        if _ip_rate_limit[ip]["reset_at"] < cutoff:
+            del _ip_rate_limit[ip]
+    cutoff2 = now - _VERIFICATION_FAIL_WINDOW * 2
+    for email in list(_verification_attempts.keys()):
+        _verification_attempts[email] = [
+            (h, ts) for h, ts in _verification_attempts[email] if ts > cutoff2
+        ]
+        if not _verification_attempts[email]:
+            del _verification_attempts[email]
+
+_cleanup_thread = threading.Thread(target=lambda: (_cleanup_rate_limit(), time.sleep(60)), daemon=True)
+_cleanup_thread.start()
+
+def _check_ip_rate_limit(client_ip: str, max_req: int = 30, window: int = 60) -> bool:
+    """检查 IP 频率限制，返回 False 表示被限流。"""
+    now = time.time()
+    entry = _ip_rate_limit.get(client_ip, {"count": 0, "reset_at": now + window})
+    if now > entry["reset_at"]:
+        entry = {"count": 0, "reset_at": now + window}
+    entry["count"] += 1
+    _ip_rate_limit[client_ip] = entry
+    return entry["count"] <= max_req
+
+def _check_verification_failures(email: str) -> bool:
+    """检查验证码连续失败次数。"""
+    now = time.time()
+    attempts = _verification_attempts.get(email, [])
+    recent = [h for h, ts in attempts if now - ts < _VERIFICATION_FAIL_WINDOW]
+    return len(recent) < _max_VERIFICATION_FAILURES
+
+
+# ── PostgreSQL 配置（强制 SSL）────────────────────────────────────────────
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
+# 自动追加 sslmode=require 确保生产环境数据库通信加密
+if DATABASE_URL and "sslmode" not in DATABASE_URL:
+    DATABASE_URL += ("?" if "?" in DATABASE_URL else "&") + "sslmode=require"
 _db_pool = None
+
+# ── 超时统一配置 ──────────────────────────────────────────────────────────
+HTTP_TIMEOUT_SHORT = 10   # 查询、health check
+HTTP_TIMEOUT_MEDIUM = 15  # 邮件、代理
+HTTP_TIMEOUT_LONG = 60    # GPT 生成任务
+
+# ── 密码强度验证 ──────────────────────────────────────────────────────────
+_PASSWORD_MIN_LEN = 10
+
+def _validate_password_strength(password: str) -> tuple[bool, str]:
+    """验证密码复杂度，返回 (是否通过, 错误信息)。"""
+    if len(password) < _PASSWORD_MIN_LEN:
+        return False, f"密码至少 {_PASSWORD_MIN_LEN} 位字符"
+    if not re.search(r"[A-Z]", password):
+        return False, "密码需包含至少一个大写字母"
+    if not re.search(r"[a-z]", password):
+        return False, "密码需包含至少一个小写字母"
+    if not re.search(r"[0-9]", password):
+        return False, "密码需包含至少一个数字"
+    if not re.search(r"[!@#$%^&*()_+\-=\[\]{}|;:'\"<>,.?/\\~`]", password):
+        return False, "密码需包含至少一个特殊字符"
+    return True, ""
 
 def _init_db_pool():
     """初始化 PostgreSQL 连接池（启动时调用一次）。"""
@@ -215,7 +329,7 @@ def _send_email(to: str, subject: str, html: str):
             "subject": subject,
             "html": html,
         },
-        timeout=15,
+        timeout=HTTP_TIMEOUT_MEDIUM,
     )
 
     if resp.status_code not in (200, 201):
@@ -237,6 +351,10 @@ def create_token(username: str) -> str:
     }
     return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
 
+def _decode_token(token: str) -> dict:
+    """内部 token 解码逻辑，供 verify_token 和 optional_auth 共用。"""
+    return pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+
 def verify_token(authorization: str | None = Header(None)) -> dict:
     """验证 JWT token，返回用户信息。未认证时直接 401。"""
     if not authorization:
@@ -245,7 +363,7 @@ def verify_token(authorization: str | None = Header(None)) -> dict:
     if scheme.lower() != "bearer" or not token:
         raise HTTPException(401, "认证格式错误")
     try:
-        payload = pyjwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        payload = _decode_token(token)
         return payload
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(401, "登录已过期，请重新登录")
@@ -259,9 +377,12 @@ def optional_auth(authorization: str | None = Header(None)) -> dict | None:
     if not authorization:
         return None
     try:
-        return verify_token.__wrapped__(authorization)
-    except HTTPException:
-        return None
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() == "bearer" and token:
+            return _decode_token(token)
+    except Exception:
+        pass
+    return None
 
 # ── 工具函数 ──────────────────────────────────────────────────────────────
 def safe_filename(name: str) -> str:
@@ -287,9 +408,14 @@ def push_to_github(filename: str, file_bytes: bytes):
     sha = None
     try:
         existing = repo.get_contents(path)
-        sha = existing.sha
+        # get_contents 返回单个文件或文件列表（目录），取第一个
+        if isinstance(existing, list):
+            sha = existing[0].sha if existing else None
+        else:
+            sha = existing.sha
     except GithubException as e:
         if e.status != 404:
+            logger.error(f"GitHub API 错误: {e}")
             raise HTTPException(500, f"GitHub API 错误: {e}")
 
     msg = f"upload: {filename}"
@@ -305,10 +431,13 @@ def delete_from_github(filename: str):
     path = f"assets/{filename}"
     try:
         existing = repo.get_contents(path)
-        repo.delete_file(path, f"delete: {filename}", existing.sha)
+        # get_contents 返回单个文件或文件列表，取第一个
+        file_obj = existing[0] if isinstance(existing, list) else existing
+        repo.delete_file(path, f"delete: {filename}", file_obj.sha)
     except GithubException as e:
         if e.status == 404:
             raise HTTPException(404, "文件不存在")
+        logger.error(f"GitHub API 错误: {e}")
         raise HTTPException(500, f"GitHub API 错误: {e}")
 
 # ── 路由 ─────────────────────────────────────────────────────────────────
@@ -423,14 +552,14 @@ async def delete_image(filename: str):
     return JSONResponse({"ok": True, "filename": safe_name})
 @app.get("/api/proxy/{path:path}")
 async def proxy_image(path: str):
-    """代理访问 GitHub Raw 图片，解决 raw.githubusercontent.com 在部分地区无法访问的问题。"""
+    """代理访问 GitHub 图片，通过 jsDelivr CDN 解决国内访问问题。"""
     if not path.startswith("assets/"):
         raise HTTPException(400, "只允许访问 assets 目录")
-    
-    github_raw_url = "https://raw.githubusercontent.com/stevenliu0618/images/main/" + path
+
+    cdn_url = f"https://cdn.jsdelivr.net/gh/{GITHUB_REPO}@main/{path}"
     
     try:
-        resp = http_requests.get(github_raw_url, timeout=15)
+        resp = http_requests.get(cdn_url, timeout=HTTP_TIMEOUT_MEDIUM)
         if resp.status_code != 200:
             raise HTTPException(502, "GitHub 返回 " + str(resp.status_code))
         from fastapi.responses import Response
@@ -446,11 +575,21 @@ async def health():
 # ── 用户认证 API ────────────────────────────────────────────────────────────
 
 @app.post("/api/auth/send-code")
-async def send_code(body: dict):
+async def send_code(body: dict, request: Request):
     """发送邮箱验证码。"""
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # IP 频率限制：每分钟最多 5 次
+    if not _check_ip_rate_limit(client_ip, max_req=5, window=60):
+        raise HTTPException(429, "请求过于频繁，请稍后再试")
+
     email = (body.get("email") or "").strip().lower()
     if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
         raise HTTPException(400, "请输入有效的邮箱地址")
+
+    # 检查验证码失败封禁
+    if not _check_verification_failures(email):
+        raise HTTPException(429, "验证码尝试次数过多，请 30 分钟后再试")
 
     # 限制频率：同一邮箱 60 秒内只能发一次
     now = time.time()
@@ -459,8 +598,10 @@ async def send_code(body: dict):
         remaining = int(60 - (now - existing["sent_at"]))
         raise HTTPException(429, f"请 {remaining} 秒后再试")
 
-    # 生成 6 位验证码
-    code = "".join(random.choices("0123456789", k=6))
+    # 生成 8 位数字字母混合验证码
+    chars = "0123456789ABCDEFGHJKLMNPQRSTUVWXYZ"  # 去掉易混淆的字符 I, O, L
+    code = "".join(random.choices(chars, k=8))
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
 
     # 发送邮件
     try:
@@ -476,7 +617,7 @@ async def send_code(body: dict):
         )
 
         verify_codes[email] = {
-            "code": code,
+            "code_hash": code_hash,
             "sent_at": now,
             "expire_at": now + CODE_EXPIRE_SECONDS,
         }
@@ -484,30 +625,46 @@ async def send_code(body: dict):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"邮件发送失败: {e}")
         raise HTTPException(500, f"邮件发送失败: {e}")
 
 @app.post("/api/auth/register")
-async def auth_register(body: dict):
+async def auth_register(body: dict, request: Request):
     """邮箱 + 验证码 + 密码 → 注册新用户。"""
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # IP 频率限制
+    if not _check_ip_rate_limit(client_ip, max_req=10, window=60):
+        raise HTTPException(429, "请求过于频繁，请稍后再试")
+
     email = (body.get("email") or "").strip().lower()
     code = (body.get("code") or "").strip()
     password = (body.get("password") or "").strip()
 
     if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]+$", email):
         raise HTTPException(400, "请输入有效的邮箱地址")
-    if not code or len(code) != 6 or not code.isdigit():
-        raise HTTPException(400, "请输入 6 位验证码")
-    if len(password) < 6:
-        raise HTTPException(400, "密码至少 6 位字符")
+    if not code or len(code) != 8:
+        raise HTTPException(400, "请输入 8 位验证码")
 
-    # 校验验证码
+    # 密码强度验证
+    ok, err_msg = _validate_password_strength(password)
+    if not ok:
+        raise HTTPException(400, err_msg)
+
+    # 校验验证码（hash 比较）
     cached = verify_codes.get(email)
     if not cached:
         raise HTTPException(400, "请先获取验证码")
     if time.time() > cached["expire_at"]:
         verify_codes.pop(email, None)
         raise HTTPException(400, "验证码已过期，请重新获取")
-    if cached["code"] != code:
+
+    input_hash = hashlib.sha256(code.encode()).hexdigest()
+    if input_hash != cached["code_hash"]:
+        # 记录失败次数
+        attempts = _verification_attempts.get(email, [])
+        attempts.append((input_hash, time.time()))
+        _verification_attempts[email] = attempts
         raise HTTPException(400, "验证码错误")
 
     # 验证码正确后清除
@@ -528,8 +685,14 @@ async def auth_register(body: dict):
     })
 
 @app.post("/api/auth/login")
-async def auth_login(body: dict):
+async def auth_login(body: dict, request: Request):
     """邮箱 + 密码 → 登录，返回 JWT。"""
+    client_ip = request.client.host if request.client else "unknown"
+
+    # IP 频率限制
+    if not _check_ip_rate_limit(client_ip, max_req=20, window=60):
+        raise HTTPException(429, "请求过于频繁，请稍后再试")
+
     email = (body.get("email") or "").strip().lower()
     password = (body.get("password") or "").strip()
 
@@ -546,6 +709,10 @@ async def auth_login(body: dict):
         raise HTTPException(400, "该账号无密码，请使用注册流程设置密码")
 
     if not _verify_password(password, user["password"]):
+        # 记录登录失败
+        attempts = _verification_attempts.get(email, [])
+        attempts.append(("login_fail", time.time()))
+        _verification_attempts[email] = attempts
         raise HTTPException(400, "密码错误")
 
     token = create_token(email)
@@ -578,8 +745,10 @@ async def update_settings(body: dict, payload: dict = Depends(verify_token)):
         raise HTTPException(404, "用户不存在")
 
     updates = {}
+    # 严格白名单：只允许更新这两个字段
     if "gpt_api_key" in body:
-        updates["gpt_api_key"] = (body["gpt_api_key"] or "").strip()
+        raw_key = (body["gpt_api_key"] or "").strip()
+        updates["gpt_api_key"] = _encrypt_api_key(raw_key) if raw_key else ""
     if "username" in body:
         name = (body["username"] or "").strip()
         if 2 <= len(name) <= 20:
@@ -594,40 +763,43 @@ async def update_settings(body: dict, payload: dict = Depends(verify_token)):
 async def gpt_status(payload: dict = Depends(verify_token)):
     """查询当前用户 API Key 配置状态。"""
     user = db_get_user(payload["sub"]) or {}
+    encrypted_key = user.get("gpt_api_key", "")
     return JSONResponse({
-        "ready": bool(user.get("gpt_api_key", "")),
+        "ready": bool(encrypted_key and _decrypt_api_key(encrypted_key)),
     })
 
 @app.post("/api/gpt/generate")
 async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     """提交生图任务到 API。"""
     user = db_get_user(payload["sub"]) or {}
-    api_key = user.get("gpt_api_key", "")
+    encrypted_key = user.get("gpt_api_key", "")
+    api_key = _decrypt_api_key(encrypted_key)
     if not api_key:
         raise HTTPException(400, "请先配置 API Key")
 
     prompt = (body.get("prompt") or "").strip()
     if not prompt:
         raise HTTPException(400, "请输入提示词")
-    payload = {
+    req_payload = {
         "prompt": prompt,
         "size": body.get("size", "auto"),
     }
     urls = body.get("urls")
     if isinstance(urls, list) and len(urls):
-        payload["urls"] = urls
+        req_payload["urls"] = urls
 
-    url = f"https://api.wuyinkeji.com/api/async/image_gpt?key={api_key}"
+    # 通过 Header 传递 API Key（避免 URL 参数暴露）
+    url = "https://api.wuyinkeji.com/api/async/image_gpt"
     headers = {
         "Authorization": api_key,
         "Content-Type": "application/json",
+        "X-API-Key": api_key,  # 备用字段
     }
 
     try:
-        resp = http_requests.post(url, json=payload, headers=headers, timeout=60)
+        resp = http_requests.post(url, json=req_payload, headers=headers, timeout=HTTP_TIMEOUT_LONG)
         data = resp.json()
 
-        # 提取关键字段返回，不透传原始响应
         task_id = data.get("data", {}).get("id") or data.get("id")
         code = data.get("code", resp.status_code)
         msg = data.get("msg") or data.get("message", "")
@@ -640,20 +812,28 @@ async def gpt_generate(body: dict, payload: dict = Depends(verify_token)):
     except http_requests.Timeout:
         raise HTTPException(502, "第三方 API 超时")
     except Exception as e:
+        logger.error(f"第三方 API 失败: {e}")
         raise HTTPException(502, f"请求第三方 API 失败: {e}")
 
 @app.get("/api/gpt/result/{task_id}")
 async def gpt_result(task_id: str, payload: dict = Depends(verify_token)):
     """查询生图任务结果。"""
     user = db_get_user(payload["sub"]) or {}
-    api_key = user.get("gpt_api_key", "")
+    encrypted_key = user.get("gpt_api_key", "")
+    api_key = _decrypt_api_key(encrypted_key)
     if not api_key:
         raise HTTPException(400, "请先配置 API Key")
 
-    url = f"https://api.wuyinkeji.com/api/async/detail?key={api_key}&id={task_id}"
+    # 通过 Header 传递 API Key（避免 URL 参数暴露）
+    url = "https://api.wuyinkeji.com/api/async/detail"
+    headers = {
+        "Authorization": api_key,
+        "X-API-Key": api_key,
+    }
+    params = {"id": task_id}
 
     try:
-        resp = http_requests.get(url, timeout=10)
+        resp = http_requests.get(url, headers=headers, params=params, timeout=HTTP_TIMEOUT_SHORT)
         data = resp.json()
 
         # 如果成功且有图片 URL，提取并简化返回

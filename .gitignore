@@ -2,9 +2,12 @@ __pycache__/
 *.pyc
 *.pyo
 .env
+.env.prod
 .venv
 venv/
 *.log
 data/
 .workbuddy/
 .DS_Store
+*.key
+config/secrets.yaml
