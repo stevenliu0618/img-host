@@ -261,7 +261,6 @@
   .img-card-info {
     padding: 10px 12px;
     display: flex; align-items: center; justify-content: space-between;
-    position: relative; z-index: 2; /* 高于 overlay，确保按钮可点击 */
   }
   .img-name { font-size: 11px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
   .img-actions { display: flex; gap: 6px; }
@@ -279,7 +278,6 @@
     display: flex; align-items: center; justify-content: center;
     opacity: 0; transition: opacity .2s;
     font-size: 22px; color: #fff; gap: 16px;
-    pointer-events: none; /* 允许点击穿透到底部按钮 */
   }
   .img-card:hover .img-overlay { opacity: 1; }
   .overlay-btn {
@@ -288,9 +286,9 @@
     color: #fff; padding: 8px 16px; border-radius: 8px;
     font-size: 13px; cursor: pointer; backdrop-filter: blur(4px);
     transition: background .15s;
-    pointer-events: auto; /* 按钮可点击 */
   }
   .overlay-btn:hover { background: rgba(255,255,255,0.35); }
+  .overlay-del:hover { background: rgba(255,59,48,0.5); border-color: rgba(255,59,48,0.6); }
 
   /* ── 空状态 ── */
   .empty-state {
@@ -385,7 +383,7 @@
       <button class="fmt-tab" data-fmt="html">HTML</button>
     </div>
     <div id="authArea">
-      <button class="btn-sm btn-sm-blue" id="loginBtn" style="display:none;"><i class="fa-regular fa-circle-user"></i> 登录</button>
+      <button class="btn-sm btn-sm-blue" id="headerLoginBtn" style="display:none;"><i class="fa-regular fa-circle-user"></i> 登录</button>
       <div id="userArea" style="display:none;position:relative;">
         <button class="user-btn" id="userBtn">
           <span class="user-avatar" id="userAvatar">U</span>
@@ -432,37 +430,46 @@
 
 <!-- Auth Modal -->
 <div class="modal-overlay" id="authModal">
-  <div class="modal-box">
-    <h2>登录 DeepNovis</h2>
-    <div class="modal-sub">输入邮箱获取验证码，新用户自动注册</div>
+  <div class="modal-box" style="width:380px;">
+    <div style="display:flex;gap:0;background:rgba(0,0,0,0.05);padding:3px;border-radius:10px;margin-bottom:20px;">
+      <button class="auth-tab active" id="authTabLogin" style="flex:1;padding:7px 0;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;background:var(--card);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.1);">登录</button>
+      <button class="auth-tab" id="authTabRegister" style="flex:1;padding:7px 0;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;background:transparent;color:var(--sub);">注册</button>
+    </div>
+
     <div class="auth-error" id="authError"></div>
 
-    <div id="authStepEmail">
+    <!-- 登录表单 -->
+    <div id="loginForm">
       <div class="form-group">
-        <input type="email" id="authEmail" placeholder="your@email.com" autocomplete="email" />
+        <input type="email" id="loginEmail" placeholder="邮箱地址" autocomplete="email" />
       </div>
-      <button class="btn-upload" id="authSendCodeBtn" style="width:100%;justify-content:center;border-radius:12px;">
-        <span id="authSendCodeText">获取验证码</span>
+      <div class="form-group">
+        <input type="password" id="loginPassword" placeholder="密码" autocomplete="current-password" />
+      </div>
+      <button class="btn-upload" id="loginBtn" style="width:100%;justify-content:center;border-radius:12px;">
+        <span id="loginBtnText">登录</span>
       </button>
     </div>
 
-    <div id="authStepCode" style="display:none;">
-      <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
-        验证码已发送至 <strong id="authCodeEmail" style="color:var(--text);"></strong>
-      </div>
+    <!-- 注册表单 -->
+    <div id="registerForm" style="display:none;">
       <div class="form-group">
-        <input type="text" id="authCode" placeholder="输入 6 位验证码" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
-          style="font-size:24px;letter-spacing:8px;text-align:center;font-weight:600;font-family:inherit;" />
+        <input type="email" id="regEmail" placeholder="邮箱地址" autocomplete="email" />
       </div>
-      <button class="btn-upload" id="authLoginBtn" style="width:100%;justify-content:center;border-radius:12px;">
-        <span id="authLoginText">登录</span>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="regCode" placeholder="验证码" maxlength="8" style="flex:1;font-family:inherit;font-size:15px;border:1.5px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--card);color:var(--text);outline:none;transition:border-color .25s;letter-spacing:4px;text-align:center;font-weight:600;" />
+        <button id="regSendCodeBtn" style="padding:12px 16px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:background .15s;">获取验证码</button>
+      </div>
+      <div class="form-group" style="margin-top:14px;">
+        <input type="password" id="regPassword" placeholder="设置密码（8位以上，含字母+数字）" autocomplete="new-password" />
+      </div>
+      <button class="btn-upload" id="registerBtn" style="width:100%;justify-content:center;border-radius:12px;">
+        <span id="registerBtnText">注册</span>
       </button>
-      <div class="auth-switch" style="margin-top:14px;">
-        <a id="authChangeEmail" style="color:var(--accent);cursor:pointer;">更换邮箱</a>
-        <span style="margin:0 8px;color:var(--border);">·</span>
-        <a id="authResendCode" style="color:var(--accent);cursor:pointer;">重新发送</a>
-        <span id="authCountdown" style="color:var(--dim);font-size:12px;"></span>
-      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--sub);">
+      登录即表示同意 <a style="color:var(--accent);text-decoration:none;">服务条款</a>
     </div>
   </div>
 </div>
@@ -523,6 +530,15 @@ function getLink(item, fmt) {
   if (fmt === 'markdown') return `![${item.filename}](${item.url})`;
   if (fmt === 'html')     return `<img src="${item.url}" alt="${item.filename}"/>`;
   return item.url;
+}
+
+// 将 GitHub raw URL 转为 proxy URL（国内可直接访问）
+function getProxyUrl(url) {
+  if (!url) return url;
+  // https://raw.githubusercontent.com/{owner}/{repo}/main/assets/{path}
+  const match = url.match(/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/main\/assets\/(.+)/);
+  if (match) return '/api/proxy/assets/' + match[1];
+  return url;
 }
 
 function toast(msg, type = 'success') {
@@ -626,7 +642,7 @@ async function uploadFile(file) {
   fd.append('file', file);
 
   try {
-    const res  = await fetch('/api/upload', { method: 'POST', body: fd });
+    const res  = await fetch('/api/upload', { method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + authToken } });
     const data = await res.json();
     clearInterval(tick);
 
@@ -642,21 +658,52 @@ async function uploadFile(file) {
   } catch (err) {
     clearInterval(tick);
     if (bar) { bar.style.width = '100%'; bar.style.background = '#ff3b30'; bar.classList.remove('shimmer'); }
-    if (status) status.textContent = '上传失败: ' + err.message;
+    if (status) status.textContent = err.message.includes('401') ? '请先登录' : '上传失败: ' + err.message;
     if (action) action.innerHTML = `<i class="fa-solid fa-circle-xmark prog-error-icon"></i>`;
-    toast(err.message, 'error');
+    toast(err.message.includes('401') ? '请先登录后再上传' : err.message, 'error');
   }
 }
 
 // ── 加载图片列表 ──────────────────────────────────────────────────────────
 async function loadImages() {
+  if (!authToken) {
+    document.getElementById('image-grid').innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <i class="fa-regular fa-lock"></i>
+      <div>请先登录后查看图片</div>
+      <button class="btn-upload" style="margin-top:12px;" onclick="showAuthModal()">
+        <i class="fa-regular fa-circle-user"></i> 登录
+      </button>
+    </div>`;
+    document.getElementById('img-count').textContent = '0';
+    return;
+  }
   const grid = document.getElementById('image-grid');
   const count = document.getElementById('img-count');
   grid.innerHTML = `<div style="color:var(--sub);font-size:14px;padding:20px 0;grid-column:1/-1;display:flex;align-items:center;gap:8px;">
     <i class="fa-solid fa-circle-notch loading-spin"></i> 加载中…
   </div>`;
   try {
-    const res = await fetch('/api/images');
+    const res = await fetch('/api/images', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    if (res.status === 401) {
+      saveAuth(null, '');
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+        <i class="fa-regular fa-lock"></i>
+        <div>登录已过期，请重新登录</div>
+        <button class="btn-upload" style="margin-top:12px;" onclick="showAuthModal()">
+          <i class="fa-regular fa-circle-user"></i> 登录
+        </button>
+      </div>`;
+      return;
+    }
+    if (res.status === 403) {
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+        <i class="fa-solid fa-shield-halved"></i>
+        <div>仅管理员可查看图片</div>
+      </div>`;
+      return;
+    }
     const data = await res.json();
     const imgs = data.images || [];
     count.textContent = imgs.length;
@@ -669,19 +716,17 @@ async function loadImages() {
     }
     grid.innerHTML = imgs.map(img => `
       <div class="img-card" onclick="openModal(${JSON.stringify(img).replace(/"/g,'&quot;')})">
-        <img src="${img.url}" alt="${img.filename}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23eee%22 width=%22100%22 height=%22100%22/></svg>'"/>
+        <img src="${getProxyUrl(img.url)}" alt="${img.filename}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect fill=%22%23eee%22 width=%22100%22 height=%22100%22/></svg>'"/>
         <div class="img-overlay">
           <button class="overlay-btn" onclick="event.stopPropagation();copyText(getLink({url:'${img.url}',filename:'${img.filename}'},copyFormat))">
             <i class="fa-solid fa-copy"></i> 复制
           </button>
+          <button class="overlay-btn overlay-del" onclick="event.stopPropagation();deleteImage('${img.filename}')">
+            <i class="fa-regular fa-trash-can"></i> 删除
+          </button>
         </div>
         <div class="img-card-info">
           <span class="img-name">${img.filename}</span>
-          <div class="img-actions">
-            <button class="img-btn del" title="删除" onclick="event.stopPropagation();deleteImage('${img.filename}')">
-              <i class="fa-regular fa-trash-can"></i>
-            </button>
-          </div>
         </div>
       </div>
     `).join('');
@@ -694,7 +739,7 @@ async function loadImages() {
 async function deleteImage(filename) {
   if (!confirm(`确认删除 ${filename}？`)) return;
   try {
-    const res = await fetch(`/api/images/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+    const res = await fetch(`/api/images/${encodeURIComponent(filename)}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + authToken } });
     if (!res.ok) { const d = await res.json(); throw new Error(d.detail); }
     toast('已删除');
     loadImages();
@@ -704,7 +749,7 @@ async function deleteImage(filename) {
 // ── 弹窗 ──────────────────────────────────────────────────────────────────
 function openModal(img) {
   modalData = img;
-  document.getElementById('modal-img').src  = img.url;
+  document.getElementById('modal-img').src  = getProxyUrl(img.url);
   document.getElementById('modal-title').textContent = img.filename;
   updateModalUrl();
   const m = document.getElementById('modal');
@@ -736,11 +781,23 @@ document.getElementById('modal-fmt-tabs').addEventListener('click', e => {
 // ── 认证 ──────────────────────────────────────────────────────────────────
 let authToken = (() => { try { return localStorage.getItem('deepnovis_token') } catch { return null } })()
 let currentUser = (() => { try { return localStorage.getItem('deepnovis_user') || '' } catch { return '' } })()
+let isAdmin = (() => { try { return localStorage.getItem('deepnovis_admin') === 'true' } catch { return false } })()
 
-function saveAuth(token, username) {
-  authToken = token; currentUser = username
-  if (token) { try { localStorage.setItem('deepnovis_token', token); localStorage.setItem('deepnovis_user', username) } catch {} }
-  else { try { localStorage.removeItem('deepnovis_token'); localStorage.removeItem('deepnovis_user') } catch {} }
+function saveAuth(token, username, admin = false) {
+  authToken = token; currentUser = username; isAdmin = admin
+  if (token) {
+    try {
+      localStorage.setItem('deepnovis_token', token);
+      localStorage.setItem('deepnovis_user', username);
+      localStorage.setItem('deepnovis_admin', admin ? 'true' : 'false');
+    } catch {}
+  } else {
+    try {
+      localStorage.removeItem('deepnovis_token');
+      localStorage.removeItem('deepnovis_user');
+      localStorage.removeItem('deepnovis_admin');
+    } catch {}
+  }
   renderAuthUI()
 }
 
@@ -750,84 +807,116 @@ function showToast(msg) {
   clearTimeout(t._t); t._t = setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) translateY(80px)' }, 2000);
 }
 
-function showAuthModal() {
-  const modal = document.getElementById('authModal'); modal.classList.add('show');
-  document.getElementById('authError').classList.remove('show'); document.getElementById('authError').textContent = '';
-  document.getElementById('authEmail').value = '';
-  document.getElementById('authStepEmail').style.display = '';
-  document.getElementById('authStepCode').style.display = 'none';
-  document.getElementById('authEmail').focus();
-}
-function showCodeStep(email) {
-  document.getElementById('authStepEmail').style.display = 'none';
-  document.getElementById('authStepCode').style.display = '';
-  document.getElementById('authCodeEmail').textContent = email;
-  document.getElementById('authCode').value = '';
-  document.getElementById('authCode').focus();
-}
 function hideAuthModal() { document.getElementById('authModal').classList.remove('show') }
+function showAuthModal() {
+  document.getElementById('authModal').classList.add('show');
+  document.getElementById('authError').classList.remove('show'); document.getElementById('authError').textContent = '';
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginEmail').focus();
+}
 function renderAuthUI() {
-  const loginBtn = document.getElementById('loginBtn'); const userArea = document.getElementById('userArea');
+  const headerLoginBtn = document.getElementById('headerLoginBtn'); const userArea = document.getElementById('userArea');
+  const dropZone = document.getElementById('drop-zone');
   if (authToken && currentUser) {
-    loginBtn.style.display = 'none'; userArea.style.display = 'block';
+    headerLoginBtn.style.display = 'none'; userArea.style.display = 'block';
     document.getElementById('userAvatar').textContent = currentUser.charAt(0).toUpperCase();
-    document.getElementById('userName').textContent = currentUser;
-    document.getElementById('menuUserName').textContent = currentUser;
+    document.getElementById('userName').textContent = currentUser + (isAdmin ? ' · 管理' : '');
+    document.getElementById('menuUserName').textContent = currentUser + (isAdmin ? ' (管理员)' : '');
+    dropZone.style.display = isAdmin ? '' : 'none';
   } else {
-    loginBtn.style.display = ''; userArea.style.display = 'none';
+    headerLoginBtn.style.display = ''; userArea.style.display = 'none';
+    dropZone.style.display = 'none';
   }
 }
 
-let authEmail = ''
+// ── Auth Modal 切换 ──
+document.getElementById('authTabLogin')?.addEventListener('click', () => {
+  document.getElementById('authTabLogin').className = 'auth-tab active';
+  document.getElementById('authTabLogin').style.cssText = 'flex:1;padding:7px 0;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;background:var(--card);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.1);';
+  document.getElementById('authTabRegister').style.cssText = 'flex:1;padding:7px 0;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;background:transparent;color:var(--sub);';
+  document.getElementById('loginForm').style.display = '';
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('authError').classList.remove('show');
+});
+document.getElementById('authTabRegister')?.addEventListener('click', () => {
+  document.getElementById('authTabRegister').className = 'auth-tab active';
+  document.getElementById('authTabRegister').style.cssText = 'flex:1;padding:7px 0;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s;background:var(--card);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.1);';
+  document.getElementById('authTabLogin').style.cssText = 'flex:1;padding:7px 0;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;background:transparent;color:var(--sub);';
+  document.getElementById('loginForm').style.display = 'none';
+  document.getElementById('registerForm').style.display = '';
+  document.getElementById('regEmail').value = '';
+  document.getElementById('regCode').value = '';
+  document.getElementById('regPassword').value = '';
+  document.getElementById('regEmail').focus();
+  document.getElementById('authError').classList.remove('show');
+});
 
-document.getElementById('loginBtn')?.addEventListener('click', () => showAuthModal());
-
-// 获取验证码
-document.getElementById('authSendCodeBtn')?.addEventListener('click', async () => {
-  const email = document.getElementById('authEmail').value.trim();
+// ── 登录 ──
+document.getElementById('headerLoginBtn')?.addEventListener('click', () => showAuthModal());
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
   const errEl = document.getElementById('authError');
   if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; errEl.classList.add('show'); return; }
-  const btn = document.getElementById('authSendCodeBtn'); const btnText = document.getElementById('authSendCodeText');
-  btn.disabled = true; btnText.textContent = '发送中…';
+  if (!password) { errEl.textContent = '请输入密码'; errEl.classList.add('show'); return; }
+  const btn = document.getElementById('loginBtn'); const btnText = document.getElementById('loginBtnText');
+  btn.disabled = true; btnText.textContent = '登录中…';
+  try {
+    const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email, password}) });
+    const d = await r.json();
+    if (!r.ok) { errEl.textContent = d.detail || '登录失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = '登录'; return; }
+    saveAuth(d.token, d.username, d.is_admin);
+    hideAuthModal();
+    showToast('登录成功');
+    loadImages();
+  } catch(e) { errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show'); }
+  btn.disabled = false; btnText.textContent = '登录';
+}
+document.getElementById('loginBtn')?.addEventListener('click', doLogin);
+
+// ── 注册 ──
+document.getElementById('regSendCodeBtn')?.addEventListener('click', async function() {
+  const email = document.getElementById('regEmail').value.trim();
+  const errEl = document.getElementById('authError');
+  if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; errEl.classList.add('show'); return; }
+  this.disabled = true; this.textContent = '发送中…';
   try {
     const r = await fetch('/api/auth/send-code', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email}) });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || '发送失败');
-    authEmail = email;
-    showCodeStep(email);
+    showToast('验证码已发送');
     let sec = 60;
-    const cd = document.getElementById('authCountdown');
-    const rs = document.getElementById('authResendCode');
-    rs.style.pointerEvents = 'none'; rs.style.color = 'var(--dim)';
-    const iv = setInterval(() => { sec--; if (sec<=0) { clearInterval(iv); cd.textContent=''; rs.style.pointerEvents=''; rs.style.color='var(--accent)'; return; } cd.textContent=`(${sec}s)`; }, 1000);
-  } catch(e) { errEl.textContent = e.message; errEl.classList.add('show'); }
-  btn.disabled = false; btnText.textContent = '获取验证码';
+    this.textContent = `重新发送(${sec}s)`;
+    const btn = this;
+    const iv = setInterval(() => { sec--; if (sec<=0) { clearInterval(iv); btn.textContent='重新发送'; btn.disabled=false; return; } btn.textContent=`重新发送(${sec}s)`; }, 1000);
+  } catch(e) { errEl.textContent = e.message; errEl.classList.add('show'); this.disabled = false; this.textContent = '获取验证码'; }
 });
-
-// 登录
-document.getElementById('authLoginBtn')?.addEventListener('click', async () => {
-  const code = document.getElementById('authCode').value.trim();
+document.getElementById('registerBtn')?.addEventListener('click', async function() {
+  const email = document.getElementById('regEmail').value.trim();
+  const code = document.getElementById('regCode').value.trim();
+  const password = document.getElementById('regPassword').value;
   const errEl = document.getElementById('authError');
-  if (!code || code.length !== 6) { errEl.textContent = '请输入 6 位验证码'; errEl.classList.add('show'); return; }
-  const btn = document.getElementById('authLoginBtn'); const btnText = document.getElementById('authLoginText');
-  btn.disabled = true; btnText.textContent = '验证中…';
+  if (!email || !email.includes('@')) { errEl.textContent = '请输入有效的邮箱地址'; errEl.classList.add('show'); return; }
+  if (!code || code.length !== 8) { errEl.textContent = '请输入 8 位验证码'; errEl.classList.add('show'); return; }
+  if (!password || password.length < 8) { errEl.textContent = '密码至少 8 位'; errEl.classList.add('show'); return; }
+  const btn = this; const btnText = document.getElementById('registerBtnText');
+  btn.disabled = true; btnText.textContent = '注册中…';
   try {
-    const r = await fetch('/api/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:authEmail, code}) });
+    const r = await fetch('/api/auth/register', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email, code, password}) });
     const d = await r.json();
-    if (!r.ok) { errEl.textContent = d.detail || '登录失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = '登录'; return; }
-    saveAuth(d.token, d.username);
-    currentUser = d.username;
+    if (!r.ok) { errEl.textContent = d.detail || '注册失败'; errEl.classList.add('show'); btn.disabled = false; btnText.textContent = '注册'; return; }
+    saveAuth(d.token, d.username, d.is_admin);
     hideAuthModal();
-    showToast(d.msg);
+    showToast('注册成功');
+    loadImages();
   } catch(e) { errEl.textContent = '网络错误: ' + e.message; errEl.classList.add('show'); }
-  btn.disabled = false; btnText.textContent = '登录';
+  btn.disabled = false; btnText.textContent = '注册';
 });
 
-document.getElementById('authEmail')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('authSendCodeBtn').click() });
-document.getElementById('authCode')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('authLoginBtn').click() });
-document.getElementById('authCode')?.addEventListener('input', (e) => { if (e.target.value.length === 6) document.getElementById('authLoginBtn').click() });
-document.getElementById('authChangeEmail')?.addEventListener('click', () => showAuthModal());
-document.getElementById('authResendCode')?.addEventListener('click', () => { if (authEmail) document.getElementById('authSendCodeBtn').click() });
+// Enter 键支持
+document.getElementById('loginPassword')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('regPassword')?.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('registerBtn').click(); });
 document.getElementById('authModal')?.addEventListener('click', (e) => { if (e.target === e.currentTarget) hideAuthModal() });
 document.getElementById('userBtn')?.addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('userMenu').classList.toggle('show') });
 document.addEventListener('click', () => document.getElementById('userMenu')?.classList.remove('show'));
