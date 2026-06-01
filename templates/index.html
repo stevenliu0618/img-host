@@ -261,6 +261,7 @@
   .img-card-info {
     padding: 10px 12px;
     display: flex; align-items: center; justify-content: space-between;
+    position: relative; z-index: 2; /* 高于 overlay，确保按钮可点击 */
   }
   .img-name { font-size: 11px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
   .img-actions { display: flex; gap: 6px; }
@@ -278,6 +279,7 @@
     display: flex; align-items: center; justify-content: center;
     opacity: 0; transition: opacity .2s;
     font-size: 22px; color: #fff; gap: 16px;
+    pointer-events: none; /* 允许点击穿透到底部按钮 */
   }
   .img-card:hover .img-overlay { opacity: 1; }
   .overlay-btn {
@@ -286,6 +288,7 @@
     color: #fff; padding: 8px 16px; border-radius: 8px;
     font-size: 13px; cursor: pointer; backdrop-filter: blur(4px);
     transition: background .15s;
+    pointer-events: auto; /* 按钮可点击 */
   }
   .overlay-btn:hover { background: rgba(255,255,255,0.35); }
 
