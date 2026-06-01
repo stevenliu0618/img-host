@@ -73,19 +73,27 @@ def _get_fernet():
     if _fernet_key is None:
         digest = hashlib.sha256(JWT_SECRET.encode()).digest()
         _fernet_key = base64.urlsafe_b64encode(digest)
-    from cryptography.fernet import Fernet
-    return Fernet(_fernet_key)
+    try:
+        from cryptography.fernet import Fernet
+        return Fernet(_fernet_key)
+    except ImportError:
+        logger.warning("⚠️ cryptography 未安装，API Key 将明文存储")
+        return None
 
 def _encrypt_api_key(key: str) -> str:
     if not key:
         return ""
     f = _get_fernet()
+    if f is None:
+        return key  # 未安装 cryptography，明文存储
     return f.encrypt(key.encode()).decode()
 
 def _decrypt_api_key(encrypted: str) -> str:
     if not encrypted:
         return ""
     f = _get_fernet()
+    if f is None:
+        return encrypted  # 未安装 cryptography，直接返回
     return f.decrypt(encrypted.encode()).decode()
 
 # ── 暴力破解防护（IP + 邮箱双维度限速）────────────────────────────────────
