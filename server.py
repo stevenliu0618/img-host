@@ -55,23 +55,6 @@ if _admin_env:
 if ADMIN_EMAILS:
     logger.info("管理员账号: %s", ", ".join(ADMIN_EMAILS))
 
-# ── 无数据库模式：管理员信息预加载 ─────────────────────────────────────
-NO_DB_MODE = not DATABASE_URL
-ADMIN_USERS_FALLBACK: dict[str, dict] = {}
-if NO_DB_MODE and ADMIN_EMAILS:
-    _admin_pass_str = os.environ.get("ADMIN_PASSWORDS", "")
-    _admin_pws = [p.strip() for p in _admin_pass_str.split(",") if p.strip()]
-    for i, email in enumerate(ADMIN_EMAILS):
-        pw = _admin_pws[i] if i < len(_admin_pws) else ""
-        ADMIN_USERS_FALLBACK[email] = {
-            "email": email,
-            "username": email.split("@")[0],
-            "password": _hash_password(pw) if pw else "",
-            "created_at": datetime.now(tz=timezone.utc).isoformat(),
-            "gpt_api_key": "",
-        }
-    logger.info("无数据库模式，已加载 %d 个管理员账号", len(ADMIN_USERS_FALLBACK))
-
 def is_admin_user(email: str) -> bool:
     """判断邮箱是否为管理员。"""
     return email.lower() in ADMIN_EMAILS
@@ -249,6 +232,22 @@ def _validate_image_content(data: bytes, expected_ext: str) -> bool:
 # ── 数据库自动降级标记 ──────────────────────────────────────────────────
 # 当 DATABASE_URL 未设置或连接池初始化失败时，使用环境变量认证
 NO_DB_MODE = not DATABASE_URL
+
+# ── 无数据库模式：管理员信息预加载 ─────────────────────────────────────
+ADMIN_USERS_FALLBACK: dict[str, dict] = {}
+if NO_DB_MODE and ADMIN_EMAILS:
+    _admin_pass_str = os.environ.get("ADMIN_PASSWORDS", "")
+    _admin_pws = [p.strip() for p in _admin_pass_str.split(",") if p.strip()]
+    for i, email in enumerate(ADMIN_EMAILS):
+        pw = _admin_pws[i] if i < len(_admin_pws) else ""
+        ADMIN_USERS_FALLBACK[email] = {
+            "email": email,
+            "username": email.split("@")[0],
+            "password": _hash_password(pw) if pw else "",
+            "created_at": datetime.now(tz=timezone.utc).isoformat(),
+            "gpt_api_key": "",
+        }
+    logger.info("无数据库模式，已加载 %d 个管理员账号", len(ADMIN_USERS_FALLBACK))
 
 # ── PostgreSQL 连接 ──────────────────────────────────────────────────────
 def _init_db_pool():
