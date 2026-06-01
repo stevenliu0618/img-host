@@ -403,7 +403,6 @@ def push_to_github(filename: str, file_bytes: bytes):
     g = get_github()
     repo = g.get_repo(GITHUB_REPO)
     path = f"assets/{filename}"
-    b64 = base64.b64encode(file_bytes).decode()
     # 检查文件是否已存在（获取 sha）
     sha = None
     try:
@@ -420,9 +419,9 @@ def push_to_github(filename: str, file_bytes: bytes):
 
     msg = f"upload: {filename}"
     if sha:
-        repo.update_file(path, msg, b64, sha)
+        repo.update_file(path, msg, file_bytes, sha)
     else:
-        repo.create_file(path, msg, b64)
+        repo.create_file(path, msg, file_bytes)
 
 def delete_from_github(filename: str):
     """通过 GitHub API 删除图片。"""
